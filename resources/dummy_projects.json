@@ -1,0 +1,127 @@
+[
+  {
+    "location": {
+      "zone": null,
+      "cloud": "envvars",
+      "project": {
+        "domain_id": "default",
+        "id": "default",
+        "name": null,
+        "domain_name": null
+      },
+      "region_name": null
+    },
+    "id": "1bdb4917ad58413ea0e126b1d06ba56d",
+    "name": "admin",
+    "properties": {
+      "tags": []
+    },
+    "domain_id": "default",
+    "tags": [],
+    "is_enabled": true,
+    "enabled": true,
+    "is_domain": false,
+    "parent_id": "default",
+    "description": "Bootstrap project for initializing the cloud."
+  },
+  {
+    "location": {
+      "zone": null,
+      "cloud": "envvars",
+      "project": {
+        "domain_id": "default",
+        "id": "default",
+        "name": null,
+        "domain_name": null
+      },
+      "region_name": null
+    },
+    "id": "68dcad4d7f804ef7bdf8285894afeef9",
+    "name": "service",
+    "properties": {
+      "tags": []
+    },
+    "domain_id": "default",
+    "tags": [],
+    "is_enabled": true,
+    "enabled": true,
+    "is_domain": false,
+    "parent_id": "default",
+    "description": ""
+  },
+  {
+    "location": {
+      "zone": null,
+      "cloud": "envvars",
+      "project": {
+        "domain_id": "default",
+        "id": "default",
+        "name": null,
+        "domain_name": null
+      },
+      "region_name": null
+    },
+    "id": "8315dd1365b34619beefb56db3ffe5c6",
+    "name": "invisible_to_admin",
+    "properties": {
+      "tags": []
+    },
+    "domain_id": "default",
+    "tags": [],
+    "is_enabled": true,
+    "enabled": true,
+    "is_domain": false,
+    "parent_id": "default",
+    "description": ""
+  },
+  {
+    "location": {
+      "zone": null,
+      "cloud": "envvars",
+      "project": {
+        "domain_id": "default",
+        "id": "default",
+        "name": null,
+        "domain_name": null
+      },
+      "region_name": null
+    },
+    "id": "cdf9856a48d84f0f8ce5d30a3675442a",
+    "name": "demo",
+    "properties": {
+      "tags": []
+    },
+    "domain_id": "default",
+    "tags": [],
+    "is_enabled": true,
+    "enabled": true,
+    "is_domain": false,
+    "parent_id": "default",
+    "description": ""
+  },
+  {
+    "location": {
+      "zone": null,
+      "cloud": "envvars",
+      "project": {
+        "domain_id": "default",
+        "id": "default",
+        "name": null,
+        "domain_name": null
+      },
+      "region_name": null
+    },
+    "id": "da5cbba720bf44628d83f4e8c3aeadc5",
+    "name": "alt_demo",
+    "properties": {
+      "tags": []
+    },
+    "domain_id": "default",
+    "tags": [],
+    "is_enabled": true,
+    "enabled": true,
+    "is_domain": false,
+    "parent_id": "default",
+    "description": ""
+  }
+]

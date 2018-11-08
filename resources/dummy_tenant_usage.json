@@ -1,0 +1,31 @@
+{
+  "tenant_usages": [
+    {
+      "start": "2018-10-19T00:00:00.000000",
+      "stop": "2018-10-23T12:57:48.454657",
+      "tenant_id": "1bdb4917ad58413ea0e126b1d06ba56d",
+      "total_hours": 326.8903788808334,
+      "total_local_gb_usage": 2179.269192538889,
+      "total_memory_mb_usage": 334735.74797397334,
+      "total_vcpus_usage": 435.8538385077778
+    },
+    {
+      "start": "2018-10-19T00:00:00.000000",
+      "stop": "2018-10-23T12:57:48.454657",
+      "tenant_id": "cdf9856a48d84f0f8ce5d30a3675442a",
+      "total_hours": 1.0481818491666668,
+      "total_local_gb_usage": 1.0481818491666668,
+      "total_memory_mb_usage": 536.6691067733334,
+      "total_vcpus_usage": 1.0481818491666668
+    },
+    {
+      "start": "2018-10-19T00:00:00.000000",
+      "stop": "2018-10-23T12:57:48.454657",
+      "tenant_id": "8315dd1365b34619beefb56db3ffe5c6",
+      "total_hours": 1.1417929602777779,
+      "total_local_gb_usage": 5.708964801388889,
+      "total_memory_mb_usage": 584.5979956622223,
+      "total_vcpus_usage": 1.1417929602777779
+    }
+  ]
+}

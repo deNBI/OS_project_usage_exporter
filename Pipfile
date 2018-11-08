@@ -1,0 +1,15 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+prometheus-client = "*"
+openstacksdk = "*"
+maya = "*"
+
+[dev-packages]
+mypy = "*"
+
+[requires]
+python_version = "3.7"
