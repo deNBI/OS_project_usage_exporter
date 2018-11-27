@@ -7,9 +7,11 @@ name = "pypi"
 prometheus-client = "*"
 openstacksdk = "*"
 maya = "*"
+toml = "*"
 
 [dev-packages]
 mypy = "*"
+ipython = "*"
 
 [requires]
 python_version = "3.7"
