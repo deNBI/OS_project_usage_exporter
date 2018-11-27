@@ -14,12 +14,14 @@ from argparse import (
     ArgumentTypeError,
 )
 import logging
-from typing import Optional, TextIO, Tuple, Dict, List, NamedTuple
+from typing import Optional, TextIO, Tuple, Dict, List, NamedTuple, Union
 from json import load
 from time import sleep
 from urllib import parse
-from datetime import datetime
+from datetime import datetime, timedelta
 from os import getenv
+from dataclasses import dataclass
+from hashlib import sha256 as sha256func
 
 # enable logging for now
 format = "%(asctime)s - %(levelname)s [%(name)s] %(threadName)s %(message)s"
@@ -29,6 +31,7 @@ import openstack  # type: ignore
 import prometheus_client  # type: ignore
 import keystoneauth1  # type: ignore
 import maya
+import toml
 
 project_labels = ["project_id", "project_name"]
 project_metrics = {
@@ -45,37 +48,40 @@ __license__ = "MIT"
 
 # Environment variables for usage inside docker
 start_date_env_var = "USAGE_EXPORTER_START_DATE"
-use_dummy_data_env_var = "USAGE_EXPORTER_DUMMY_MODE"
+dummy_file_env_var = "USAGE_EXPORTER_DUMMY_FILE"
 update_interval_env_var = "USAGE_EXPORTER_UPDATE_INTERVAL"
 
-# Location of dummy data relative to this file
-dummy_data = ("./resources/dummy_projects.json", "./resources/dummy_tenant_usage.json")
+default_dummy_file = "resources/dummy_machines.toml"
+
+UsageTuple = NamedTuple("UsageTuple", [("vcpu_hours", float), ("mb_hours", float)])
+
+hour_timedelta = timedelta(hours=1)
+
+script_start = datetime.now()
 
 
-class _Exporter:
-    def __init__(
-        self,
-        dummy_projects: Optional[TextIO] = None,
-        dummy_simple_tenant_usages: Optional[TextIO] = None,
-        stats_start: datetime = datetime.today(),
-    ) -> None:
+def sha256(content: bytes) -> str:
+    s = sha256func()
+    s.update(content)
+    return s.hexdigest()
+
+
+class _ExporterBase:
+    def update(self):
+        ...
+
+
+class OpenstackExporter(_ExporterBase):
+    def __init__(self, stats_start: datetime = datetime.today()) -> None:
         self.projects = {}  # type: Dict[str, str]
         self.stats_start = stats_start
-        if all((dummy_simple_tenant_usages, dummy_projects)):
-            self.dummy = True
-            self.cloud = None
-            self.dummy_projects = load(dummy_projects)  # type: ignore
-            self.simple_tenant_usages = load(dummy_simple_tenant_usages)  # type: ignore
-        else:
-            self.dummy = False
-            self.dummy_projects = None
-            self.simple_tenant_usages = None
-            try:
-                self.cloud = openstack.connect()
-            except keystoneauth1.exceptions.auth_plugins.MissingRequiredOptions:
-                logging.error("Could not authenticate against OpenStack, Aborting!")
-                logging.info("Consider using the dummy mode for testing")
-                raise ValueError
+        self.simple_tenant_usages = None
+        try:
+            self.cloud = openstack.connect()
+        except keystoneauth1.exceptions.auth_plugins.MissingRequiredOptions:
+            logging.error("Could not authenticate against OpenStack, Aborting!")
+            logging.info("Consider using the dummy mode for testing")
+            raise ValueError
         self.update()
 
     def update(self) -> None:
@@ -96,42 +102,105 @@ class _Exporter:
         """
         :param query_args: Additional parameters for the `os-simple-tenant-usage`-url
         """
-        if self.dummy:
-            return {
-                project["tenant_id"]: {
-                    metric: project[metric] for metric in project_metrics
-                }
-                for project in self.simple_tenant_usages[  # type: ignore
-                    "tenant_usages"
-                ]
-            }
-        else:
-            query_params = "&".join(
-                "=".join((key, value)) for key, value in query_args.items()
-            )
-            try:
-                json_payload = self.cloud.compute.get(  # type: ignore
-                    "/os-simple-tenant-usage?" + query_params
-                ).json()
-                tenant_usage = json_payload["tenant_usages"]  # type: ignore
-            except KeyError:
-                logging.error("Received following invalid json payload:", json_payload)
+        query_params = "&".join(
+            "=".join((key, value)) for key, value in query_args.items()
+        )
+        try:
+            json_payload = self.cloud.compute.get(  # type: ignore
+                "/os-simple-tenant-usage?" + query_params
+            ).json()
+            tenant_usage = json_payload["tenant_usages"]  # type: ignore
+        except KeyError:
+            logging.error("Received following invalid json payload: %s", json_payload)
 
-            return {
-                project["tenant_id"]: {
-                    metric: project[metric] for metric in project_metrics
-                }
-                for project in tenant_usage
+        return {
+            project["tenant_id"]: {
+                metric: project[metric] for metric in project_metrics
             }
+            for project in tenant_usage
+        }
 
     def collect_projects(self) -> Dict[str, str]:
-        if self.dummy:
-            return {project["id"]: project["name"] for project in self.dummy_projects}
+        return {
+            project["id"]: project["name"]
+            for project in self.cloud.list_projects()  # type: ignore
+        }
+
+
+@dataclass
+class DummyMachine:
+    name: str
+    cpus: int = 4
+    ram: int = 8192
+    uptime: Union[bool, datetime, Tuple[datetime, datetime]] = True
+
+    def __post_init__(self) -> None:
+        if self.cpus <= 0 or self.ram <= 0:
+            raise ValueError("`cpu` and `ram` must be positive")
+        if type(self.uptime) in (list, tuple):
+            if self.uptime[0] > self.uptime[1]:  # type: ignore
+                raise ValueError(
+                    "First uptime-tuple datetime must be older than second one"
+                )
+            # remove any timezone information
+            self.uptime = [dt.replace(tzinfo=None) for dt in self.uptime]
+        elif type(self.uptime) is datetime:
+            self.uptime = self.uptime.replace(tzinfo=None)
+
+    def usage_value(self) -> UsageTuple:
+        """
+        Returns the total ram and cpu usage counted in hours of this machine, depending
+        on its `uptime` configuration`
+        """
+        now = datetime.now()
+        if type(self.uptime) is bool and self.uptime:
+            # in case of true the machine `booted` when this script was started
+            hours_uptime = (datetime.now() - script_start) / hour_timedelta
+            return UsageTuple(self.cpus * hours_uptime, self.ram * hours_uptime)
+        elif not self.uptime:
+            return UsageTuple(0, 0)
+        elif type(self.uptime) is datetime:
+            hours_uptime = (now - self.uptime.replace(tzinfo=None)) / hour_timedelta
+            if hours_uptime > 0:
+                return UsageTuple(self.cpus * hours_uptime, self.ram * hours_uptime)
+            else:
+                return UsageTuple(0, 0)
         else:
-            return {
-                project["id"]: project["name"]
-                for project in self.cloud.list_projects()  # type: ignore
-            }
+            if self.uptime[0] > now:
+                # machine did not boot yet
+                return UsageTuple(0, 0)
+            elif self.uptime[1] < now:
+                # machine did run already and is considered down
+                hours_uptime = (self.uptime[1] - self.uptime[0]) / hour_timedelta
+            else:
+                # machine booted in the past but is still running
+                hours_uptime = (now - self.uptime[0]) / hour_timedelta
+            return UsageTuple(self.cpus * hours_uptime, self.ram * hours_uptime)
+
+
+class DummyExporter(_ExporterBase):
+    def __init__(self, dummy_values: TextIO) -> None:
+        self.dummy_values = toml.loads(dummy_values.read())
+        self.projects = {}
+        for name, content in self.dummy_values.items():
+            self.projects[name] = [
+                DummyMachine(name=machine_name, **values)
+                for machine_name, values in content.items()
+            ]
+        self.update()
+
+    def update(self) -> None:
+        for project_name, machines in self.projects.items():
+            project_id = sha256(project_name.encode())
+            project_usages = [machine.usage_value() for machine in machines]
+            vcpu_hours = sum(usage.vcpu_hours for usage in project_usages)
+            mb_hours = sum(usage.mb_hours for usage in project_usages)
+            project_metrics["total_vcpus_usage"].labels(
+                project_id=project_id, project_name=project_name
+            ).set(vcpu_hours)
+            project_metrics["total_memory_mb_usage"].labels(
+                project_id=project_id, project_name=project_name
+            ).set(mb_hours)
 
 
 def valid_date(s):
@@ -150,12 +219,12 @@ def main():
     )
     parser.add_argument(
         "-d",
-        "--data",
-        nargs=2,
+        "--dummy-data",
         type=FileType(),
-        metavar=("projects", "tenant_usages"),
-        default=dummy_data,
-        help="""Use dummy values instead of connecting to an openstack instance.""",
+        help=f"""Use dummy values instead of connecting to an openstack instance. Usage
+        values are calculated base on the configured uptime, take a look at the example
+        file for an explanation {default_dummy_file}. Can also be provided via
+        environment variable {dummy_file_env_var}""",
     )
     parser.add_argument(
         "-s",
@@ -165,23 +234,34 @@ def main():
         help=f"""Beginning time of stats (YYYY-MM-DD). If set the value of
         {start_date_env_var} is used. Uses maya for parsing.""",
     )
+    parser.add_argument(
+        "-i",
+        "--update-interval",
+        type=int,
+        default=int(getenv(update_interval_env_var, 300)),
+        help=f"""Time to sleep between intervals, in case the calls cause to much load on
+        your openstack instance. Defaults to the value of ${update_interval_env_var} or
+        300 (in seconds)""",
+    )
     args = parser.parse_args()
-    if getenv(use_dummy_data_env_var) or False:
+
+    if args.dummy_data:
+        logging.info("Using dummy export with data from %s", args.dummy_data.name)
+        exporter = DummyExporter(args.dummy_data)
+    elif getenv(dummy_file_env_var):
+        logging.info("Using dummy export with data from %s", getenv(dummy_file_env_var))
         # if the default dummy data have been used we need to open them, argparse
         # hasn't done this for us since the default value has not been a string
-        if type(args.data[0]) is str:
-            args.data = map(open, args.data)
-        exporter = _Exporter(*args.data)
+        with open(getenv(dummy_file_env_var)) as file:
+            exporter = DummyExporter(file)
     else:
-        exporter = _Exporter(stats_start=args.start)
+        logging.info("Using regular openstack exporter")
+        exporter = OpenstackExporter(stats_start=args.start)
+    logging.info("Beginning to serve metrics on port 8080")
     prometheus_client.start_http_server(8080)
-    try:
-        update_interval = int(getenv(update_interval_env_var, ""))
-    except ValueError:
-        update_interval = 300
     while True:
         try:
-            sleep(update_interval)
+            sleep(args.update_interval)
             exporter.update()
         except KeyboardInterrupt:
             logging.info("Received Ctrl-c, exiting.")

@@ -1,6 +1,7 @@
 # See github.com/toml-lang/toml for a configuration guide
-# <project_name>.<tenant_id> to use in export values
-[admin.1234abcd]
+# enter the project name in square brackets
+# project_id will be its SHA256
+[admin]
 
 # minimal information, this machine will be considered started the moment the
 # information are parsed
@@ -12,3 +13,7 @@ test2 = {ram = 256, cpus = 2, uptime = 2018-11-26T14:30:00Z}
 test3 = {ram = 256, cpus = 2, uptime = false}
 # considered online in between the two given timestamps
 test4 = {ram = 8192, cpus = 24, uptime = [2018-11-27T14:00:00Z, 2018-11-27T15:00:10Z]}
+
+[demo]
+test1 = {ram=2048, cpus=8, uptime=true}
+test2 = {ram=4096, cpus=8, uptime=true}
