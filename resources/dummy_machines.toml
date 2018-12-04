@@ -1,6 +1,6 @@
 # See github.com/toml-lang/toml for a configuration guide
 # enter the project name in square brackets
-# project_id will be its SHA256
+# project_id will be the last 16 chars of its SHA256
 [admin]
 
 # minimal information, this machine will be considered started the moment the

@@ -191,7 +191,7 @@ class DummyExporter(_ExporterBase):
 
     def update(self) -> None:
         for project_name, machines in self.projects.items():
-            project_id = sha256(project_name.encode())
+            project_id = sha256(project_name.encode())[-16:]
             project_usages = [machine.usage_value() for machine in machines]
             vcpu_hours = sum(usage.vcpu_hours for usage in project_usages)
             mb_hours = sum(usage.mb_hours for usage in project_usages)
