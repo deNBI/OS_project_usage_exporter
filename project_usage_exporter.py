@@ -14,7 +14,7 @@ from argparse import (
     ArgumentTypeError,
 )
 import logging
-from typing import Optional, TextIO, Tuple, Dict, List, NamedTuple, Union
+from typing import Optional, TextIO, Tuple, Dict, List, NamedTuple, Union, cast
 from json import load
 from time import sleep
 from urllib import parse
@@ -22,6 +22,7 @@ from datetime import datetime, timedelta
 from os import getenv
 from dataclasses import dataclass
 from hashlib import sha256 as sha256func
+from enum import Enum
 
 # enable logging for now
 format = "%(asctime)s - %(levelname)s [%(name)s] %(threadName)s %(message)s"
@@ -127,8 +128,30 @@ class OpenstackExporter(_ExporterBase):
         }
 
 
+class UptimeInformation(Enum):
+    NO_UPTIME = 0
+    SINCE_SCRIPT_START = 1
+    SINCE_DATETIME = 2
+    BETWEEN_DATETIMES = 3
+
+
 @dataclass
 class DummyMachine:
+    """
+    Representing a dummy machine causing usage to monitor.
+    :param name: Currently not used outside but might be in future, therefore leave it
+    :param cpus: Number of cpus the dummy machine is using.
+    :param ram: Amount of RAM [mb] the machine is using.
+    :param uptime: Determines whether the machine is *up* and its usage so far. In case
+    of True the machine is considered booted up the instant this script is started. In
+    case of False it hasn't been booted ever (no actual use case).
+    In case of a single datetime the machine is considered *up* since that moment (for
+    simplicity the timezone information are ignored). In case of a list of two datetimes
+    the machine is considered *up* the time in between. The first one must be
+    older/smaller than the second one and both but relative to the moment the script
+    started both may lie in the future or past.
+    """
+
     name: str
     cpus: int = 4
     ram: int = 8192
@@ -137,15 +160,25 @@ class DummyMachine:
     def __post_init__(self) -> None:
         if self.cpus <= 0 or self.ram <= 0:
             raise ValueError("`cpu` and `ram` must be positive")
-        if type(self.uptime) in (list, tuple):
+        if isinstance(self.uptime, (list, tuple)):
             if self.uptime[0] > self.uptime[1]:  # type: ignore
                 raise ValueError(
                     "First uptime-tuple datetime must be older than second one"
                 )
             # remove any timezone information
-            self.uptime = [dt.replace(tzinfo=None) for dt in self.uptime]
-        elif type(self.uptime) is datetime:
-            self.uptime = self.uptime.replace(tzinfo=None)
+            self.uptime_information = UptimeInformation.BETWEEN_DATETIMES
+        elif isinstance(self.uptime, datetime):
+            self.uptime_information = UptimeInformation.SINCE_DATETIME
+        elif isinstance(self.uptime, bool):
+            self.uptime_information = (
+                UptimeInformation.SINCE_SCRIPT_START
+                if self.uptime
+                else UptimeInformation.NO_UPTIME
+            )
+        else:
+            raise ValueError(
+                f"Invalid type for param `uptime` (got {type(self.uptime)}"
+            )
 
     def usage_value(self) -> UsageTuple:
         """
@@ -153,35 +186,41 @@ class DummyMachine:
         on its `uptime` configuration`
         """
         now = datetime.now()
-        if type(self.uptime) is bool and self.uptime:
-            # in case of true the machine `booted` when this script was started
+        if self.uptime_information is UptimeInformation.NO_UPTIME:
+            return UsageTuple(0, 0)
+        elif self.uptime_information is UptimeInformation.SINCE_SCRIPT_START:
             hours_uptime = (datetime.now() - script_start) / hour_timedelta
             return UsageTuple(self.cpus * hours_uptime, self.ram * hours_uptime)
-        elif not self.uptime:
-            return UsageTuple(0, 0)
-        elif type(self.uptime) is datetime:
-            hours_uptime = (now - self.uptime.replace(tzinfo=None)) / hour_timedelta
+        elif self.uptime_information is UptimeInformation.SINCE_DATETIME:
+            # to satisfy `mypy` type checker
+            boot_datetime = cast(datetime, self.uptime)
+            hours_uptime = (now - boot_datetime.replace(tzinfo=None)) / hour_timedelta
+            # do not report negative usage in case the machine is not *booted yet*
             if hours_uptime > 0:
                 return UsageTuple(self.cpus * hours_uptime, self.ram * hours_uptime)
             else:
                 return UsageTuple(0, 0)
         else:
-            if self.uptime[0] > now:
+            # to satisfy `mypy` type checker
+            runtime_tuple = cast(Tuple[datetime, datetime], self.uptime)
+            boot_datetime = cast(datetime, runtime_tuple[0].replace(tzinfo=None))
+            shutdown_datetime = cast(datetime, runtime_tuple[1].replace(tzinfo=None))
+            if boot_datetime > now:
                 # machine did not boot yet
                 return UsageTuple(0, 0)
-            elif self.uptime[1] < now:
+            elif shutdown_datetime < now:
                 # machine did run already and is considered down
-                hours_uptime = (self.uptime[1] - self.uptime[0]) / hour_timedelta
+                hours_uptime = (shutdown_datetime - boot_datetime) / hour_timedelta
             else:
                 # machine booted in the past but is still running
-                hours_uptime = (now - self.uptime[0]) / hour_timedelta
+                hours_uptime = (now - boot_datetime) / hour_timedelta
             return UsageTuple(self.cpus * hours_uptime, self.ram * hours_uptime)
 
 
 class DummyExporter(_ExporterBase):
     def __init__(self, dummy_values: TextIO) -> None:
         self.dummy_values = toml.loads(dummy_values.read())
-        self.projects = {}
+        self.projects: Dict[str, List[DummyMachine]] = {}
         for name, content in self.dummy_values.items():
             self.projects[name] = [
                 DummyMachine(name=machine_name, **values)
