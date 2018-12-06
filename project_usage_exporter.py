@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Query tenant usage from an openstack instance and provide it in a prometheus compatible 
+Query project usage from an openstack instance and provide it in a prometheus compatible 
 format.
 
 Read-only access to the openstack-APIs `list_projects` and `/os-simple-tenant-usages` is 
@@ -36,10 +36,10 @@ import toml
 project_labels = ["project_id", "project_name"]
 project_metrics = {
     "total_vcpus_usage": prometheus_client.Gauge(
-        "tenant_vcpu_usage", "Total vcpu usage", labelnames=project_labels
+        "project_vcpu_usage", "Total vcpu usage", labelnames=project_labels
     ),
     "total_memory_mb_usage": prometheus_client.Gauge(
-        "tenant_mb_usage", "Total MB usage", labelnames=project_labels
+        "project_mb_usage", "Total MB usage", labelnames=project_labels
     ),
 }
 
@@ -75,7 +75,7 @@ class OpenstackExporter(_ExporterBase):
     def __init__(self, stats_start: datetime = datetime.today()) -> None:
         self.projects = {}  # type: Dict[str, str]
         self.stats_start = stats_start
-        self.simple_tenant_usages = None
+        self.simple_project_usages = None
         try:
             self.cloud = openstack.connect()
         except keystoneauth1.exceptions.auth_plugins.MissingRequiredOptions:
@@ -109,15 +109,15 @@ class OpenstackExporter(_ExporterBase):
             json_payload = self.cloud.compute.get(  # type: ignore
                 "/os-simple-tenant-usage?" + query_params
             ).json()
-            tenant_usage = json_payload["tenant_usages"]  # type: ignore
+            project_usage = json_payload["tenant_usages"]  # type: ignore
         except KeyError:
             logging.error("Received following invalid json payload: %s", json_payload)
 
         return {
-            project["tenant_id"]: {
+            project["project_id"]: {
                 metric: project[metric] for metric in project_metrics
             }
-            for project in tenant_usage
+            for project in project_usage
         }
 
     def collect_projects(self) -> Dict[str, str]:
