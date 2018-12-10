@@ -2,11 +2,15 @@
 # enter the project name in square brackets
 # project_id will be its SHA256
 [ProjectA]
-
+domain = 'elixir'
 # considered online in between the two given timestamps
-Machine1 = {ram = 8192, cpus = 8, uptime = true}
-
-test4 = {ram = 8192, cpus = 6, uptime = [2018-11-27T14:00:00Z, 2018-12-27T15:00:10Z]}
+machines = [
+  {ram = 8192, cpus = 8, uptime = true},
+  {ram = 8192, cpus = 6, uptime = [2018-11-27T14:00:00Z, 2018-12-27T15:00:10Z]},
+]
 
 [ProjectB]
-devstack = {ram=16384, cpus=24, uptime = [2018-10-20T00:00:00Z, 2018-11-25T14:30:30Z]}
+domain = 'elixir'
+machines = [
+  {ram=16384, cpus=24, uptime = [2018-10-20T00:00:00Z, 2018-11-25T14:30:30Z]},
+]

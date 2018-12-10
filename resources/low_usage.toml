@@ -2,10 +2,15 @@
 # enter the project name in square brackets
 # project_id will be its SHA256
 [DataTransfer]
-
+domain = 'DomainA'
 # minimal information, this machine will be considered started the moment the
 # information are parsed
-transfer_machine = {ram=2048, cpus=2}
+machines = [
+  {ram=2048, cpus=2},
+]
 
 [PingTest]
-PingTarget = {ram = 128, cpus = 1}
+domain = 'elixir'
+machines = [
+  {ram = 128, cpus = 1},
+]
