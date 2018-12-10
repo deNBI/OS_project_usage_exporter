@@ -17,6 +17,7 @@ import logging
 from typing import (
     Optional,
     TextIO,
+    Set,
     Tuple,
     Dict,
     List,
@@ -47,6 +48,8 @@ logging.basicConfig(level=logging.INFO, format=format)
 
 project_labels = ["project_id", "project_name", "domain_name", "domain_id"]
 project_metrics = {
+    # the key is the name of the value inside the API response, therefore do not change
+    # it
     "total_vcpus_usage": prometheus_client.Gauge(
         "project_vcpu_usage", "Total vcpu usage", labelnames=project_labels
     ),
@@ -83,20 +86,31 @@ def sha256(content: str) -> str:
     return s.hexdigest()
 
 
+@dataclass(frozen=True)
+class OpenstackProject:
+    id: str
+    name: str
+    domain_name: str
+    domain_id: str
+
+
 class _ExporterBase:
     def update(self):
         ...
 
 
 class OpenstackExporter(_ExporterBase):
-    def __init__(self, stats_start: datetime = datetime.today()) -> None:
-        self.projects = {}  # type: Dict[str, str]
+    def __init__(
+        self, stats_start: datetime = datetime.today(), domains: Iterable[str] = None
+    ) -> None:
+        self.domains = set(domains) if domains else None
+        self.projects: Set[OpenstackProject] = set()
         self.stats_start = stats_start
         self.simple_project_usages = None
         try:
             self.cloud = openstack.connect()
         except keystoneauth1.exceptions.auth_plugins.MissingRequiredOptions:
-            logging.error("Could not authenticate against OpenStack, Aborting!")
+            logging.exception("Could not authenticate against OpenStack, Aborting!")
             logging.info("Consider using the dummy mode for testing")
             raise ValueError
         self.update()
@@ -112,36 +126,80 @@ class OpenstackExporter(_ExporterBase):
         for project, usage_values in self.usages.items():
             for usage_name, gauge in project_metrics.items():
                 gauge.labels(
-                    project_id=project, project_name=self.projects[project]
+                    project_id=project.id,
+                    project_name=project.name,
+                    domain_name=project.domain_name,
+                    domain_id=project.domain_id,
                 ).set(usage_values[usage_name])
 
-    def collect_usages(self, **query_args) -> Dict[str, Dict[str, float]]:
+    def collect_usages(self, **query_args) -> Dict[OpenstackProject, Dict[str, float]]:
         """
         :param query_args: Additional parameters for the `os-simple-tenant-usage`-url
         """
         query_params = "&".join(
             "=".join((key, value)) for key, value in query_args.items()
         )
-        try:
-            json_payload = self.cloud.compute.get(  # type: ignore
-                "/os-simple-tenant-usage?" + query_params
-            ).json()
-            project_usage = json_payload["tenant_usages"]  # type: ignore
-        except KeyError:
-            logging.error("Received following invalid json payload: %s", json_payload)
+        project_usages: Dict[OpenstackProject, Dict[str, float]] = {}
+        for project in self.projects:
+            try:
+                json_payload = self.cloud.compute.get(  # type: ignore
+                    f"/os-simple-tenant-usage/{project.id}?" + query_params
+                ).json()
+                project_usage = json_payload["tenant_usage"]  # type: ignore
+                if not project_usage:
+                    logging.info(
+                        "Project %s has no running projects, skipping", project
+                    )
+                    continue
+            except KeyError:
+                logging.error(
+                    "Received following invalid json payload: %s", json_payload
+                )
+                continue
+            except BaseException:
+                logging.exception("Received following exception:")
+                continue
 
-        return {
-            project["project_id"]: {
-                metric: project[metric] for metric in project_metrics
+            project_usages[project] = {
+                metric: project_usage[metric] for metric in project_metrics
             }
-            for project in project_usage
-        }
 
-    def collect_projects(self) -> Dict[str, str]:
-        return {
-            project["id"]: project["name"]
-            for project in self.cloud.list_projects()  # type: ignore
-        }
+        return project_usages
+
+    def collect_projects(self) -> Set[OpenstackProject]:
+        projects: Set[OpenstackProject] = set()
+        if self.domains:
+            for domain_name in self.domains:
+                domain = self.cloud.get_domain(name_or_id=domain_name)
+                if not domain:
+                    logging.info(
+                        "Could not detect any domain with name %s. Skipping",
+                        domain_name,
+                    )
+                    continue
+                for project in self.cloud.list_projects(domain_id=domain.id):
+                    projects.add(
+                        OpenstackProject(
+                            id=project.id,
+                            name=project.name,
+                            domain_name=domain.name,
+                            domain_id=domain.id,
+                        )
+                    )
+            return projects
+        else:
+            for project in self.cloud.list_projects():
+                projects.add(
+                    OpenstackProject(
+                        id=project.id,
+                        name=project.name,
+                        domain_name=self.cloud.get_domain(
+                            name_or_id=project.domain_id
+                        ).name,
+                        domain_id=project.domain_id,
+                    )
+                )
+        return projects
 
 
 class UptimeInformation(Enum):
@@ -244,14 +302,14 @@ class DummyExporter(_ExporterBase):
             self.projects.append(
                 DummyProject(
                     name=project_name,
-                    domain=project_content.get("domain", ""),
+                    domain_name=project_content.get("domain", ""),
                     machines=machines,
                 )
             )
 
     def update(self) -> None:
         for project in self.projects:
-            if self.domains and project.domain not in self.domains:
+            if self.domains and project.domain_name not in self.domains:
                 continue
             project_usages = [machine.usage_value() for machine in project.machines]
             vcpu_hours = sum(usage.vcpu_hours for usage in project_usages)
@@ -259,13 +317,13 @@ class DummyExporter(_ExporterBase):
             project_metrics["total_vcpus_usage"].labels(
                 project_id=project.id,
                 project_name=project.name,
-                domain_name=project.domain,
+                domain_name=project.domain_name,
                 domain_id=project.domain_id,
             ).set(vcpu_hours)
             project_metrics["total_memory_mb_usage"].labels(
                 project_id=project.id,
                 project_name=project.name,
-                domain_name=project.domain,
+                domain_name=project.domain_name,
                 domain_id=project.domain_id,
             ).set(mb_hours)
 
@@ -274,11 +332,11 @@ class DummyExporter(_ExporterBase):
 class DummyProject:
     name: str
     machines: List[DummyMachine]
-    domain: str = ""
+    domain_name: str = ""
 
     def __post_init__(self):
         self.id = sha256(self.name)[-16:]
-        self.domain_id = sha256(self.domain)[-16:]
+        self.domain_id = sha256(self.domain_name)[-16:]
 
 
 def valid_date(s):
@@ -347,10 +405,10 @@ def main():
         # if the default dummy data have been used we need to open them, argparse
         # hasn't done this for us since the default value has not been a string
         with open(getenv(dummy_file_env_var)) as file:
-            exporter = DummyExporter(file)
+            exporter = DummyExporter(file, args.domain)
     else:
         logging.info("Using regular openstack exporter")
-        exporter = OpenstackExporter(stats_start=args.start)
+        exporter = OpenstackExporter(domains=args.domain, stats_start=args.start)
     logging.info("Beginning to serve metrics on port 8080")
     prometheus_client.start_http_server(8080)
     while True:
