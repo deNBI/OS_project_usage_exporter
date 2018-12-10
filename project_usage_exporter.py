@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Query project usage from an openstack instance and provide it in a prometheus compatible 
+Query project usage from an openstack instance and provide it in a prometheus compatible
 format.
 
-Read-only access to the openstack-APIs `list_projects` and `/os-simple-tenant-usages` is 
+Read-only access to the openstack-APIs `list_projects` and `/os-simple-tenant-usages` is
 needed.
 """
 
@@ -14,7 +14,17 @@ from argparse import (
     ArgumentTypeError,
 )
 import logging
-from typing import Optional, TextIO, Tuple, Dict, List, NamedTuple, Union, cast
+from typing import (
+    Optional,
+    TextIO,
+    Tuple,
+    Dict,
+    List,
+    NamedTuple,
+    Union,
+    cast,
+    Iterable,
+)
 from json import load
 from time import sleep
 from urllib import parse
@@ -24,17 +34,18 @@ from dataclasses import dataclass
 from hashlib import sha256 as sha256func
 from enum import Enum
 
-# enable logging for now
-format = "%(asctime)s - %(levelname)s [%(name)s] %(threadName)s %(message)s"
-logging.basicConfig(level=logging.INFO, format=format)
-
 import openstack  # type: ignore
 import prometheus_client  # type: ignore
 import keystoneauth1  # type: ignore
 import maya
 import toml
 
-project_labels = ["project_id", "project_name"]
+# enable logging for now
+format = "%(asctime)s - %(levelname)s [%(name)s] %(threadName)s %(message)s"
+logging.basicConfig(level=logging.INFO, format=format)
+
+
+project_labels = ["project_id", "project_name", "domain_name", "domain_id"]
 project_metrics = {
     "total_vcpus_usage": prometheus_client.Gauge(
         "project_vcpu_usage", "Total vcpu usage", labelnames=project_labels
@@ -49,8 +60,13 @@ __license__ = "MIT"
 
 # Environment variables for usage inside docker
 start_date_env_var = "USAGE_EXPORTER_START_DATE"
-dummy_file_env_var = "USAGE_EXPORTER_DUMMY_FILE"
 update_interval_env_var = "USAGE_EXPORTER_UPDATE_INTERVAL"
+
+# name of the domain whose projects to monitor
+project_domain_env_var = "USAGE_EXPORTER_PROJECT_DOMAINS"
+default_project_domains = ["elixir"]
+
+dummy_file_env_var = "USAGE_EXPORTER_DUMMY_FILE"
 
 default_dummy_file = "resources/dummy_machines.toml"
 
@@ -61,9 +77,9 @@ hour_timedelta = timedelta(hours=1)
 script_start = datetime.now()
 
 
-def sha256(content: bytes) -> str:
+def sha256(content: str) -> str:
     s = sha256func()
-    s.update(content)
+    s.update(content.encode())
     return s.hexdigest()
 
 
@@ -152,7 +168,6 @@ class DummyMachine:
     started both may lie in the future or past.
     """
 
-    name: str
     cpus: int = 4
     ram: int = 8192
     uptime: Union[bool, datetime, Tuple[datetime, datetime]] = True
@@ -218,28 +233,52 @@ class DummyMachine:
 
 
 class DummyExporter(_ExporterBase):
-    def __init__(self, dummy_values: TextIO) -> None:
+    def __init__(self, dummy_values: TextIO, domains: Iterable[str] = None) -> None:
         self.dummy_values = toml.loads(dummy_values.read())
-        self.projects: Dict[str, List[DummyMachine]] = {}
-        for name, content in self.dummy_values.items():
-            self.projects[name] = [
-                DummyMachine(name=machine_name, **values)
-                for machine_name, values in content.items()
+        self.domains = set(domains) if domains else None
+        self.projects: List[DummyProject] = []
+        for project_name, project_content in self.dummy_values.items():
+            machines = [
+                DummyMachine(**machine) for machine in project_content["machines"]
             ]
-        self.update()
+            self.projects.append(
+                DummyProject(
+                    name=project_name,
+                    domain=project_content.get("domain", ""),
+                    machines=machines,
+                )
+            )
 
     def update(self) -> None:
-        for project_name, machines in self.projects.items():
-            project_id = sha256(project_name.encode())[-16:]
-            project_usages = [machine.usage_value() for machine in machines]
+        for project in self.projects:
+            if self.domains and project.domain not in self.domains:
+                continue
+            project_usages = [machine.usage_value() for machine in project.machines]
             vcpu_hours = sum(usage.vcpu_hours for usage in project_usages)
             mb_hours = sum(usage.mb_hours for usage in project_usages)
             project_metrics["total_vcpus_usage"].labels(
-                project_id=project_id, project_name=project_name
+                project_id=project.id,
+                project_name=project.name,
+                domain_name=project.domain,
+                domain_id=project.domain_id,
             ).set(vcpu_hours)
             project_metrics["total_memory_mb_usage"].labels(
-                project_id=project_id, project_name=project_name
+                project_id=project.id,
+                project_name=project.name,
+                domain_name=project.domain,
+                domain_id=project.domain_id,
             ).set(mb_hours)
+
+
+@dataclass
+class DummyProject:
+    name: str
+    machines: List[DummyMachine]
+    domain: str = ""
+
+    def __post_init__(self):
+        self.id = sha256(self.name)[-16:]
+        self.domain_id = sha256(self.domain)[-16:]
 
 
 def valid_date(s):
@@ -266,6 +305,22 @@ def main():
         environment variable {dummy_file_env_var}""",
     )
     parser.add_argument(
+        "--domain",
+        default=[
+            domain
+            for domain in getenv(
+                project_domain_env_var, ",".join(default_project_domains)
+            ).split(",")
+            if domain
+        ],
+        type=str,
+        nargs="*",
+        help=f"""Only export usages of projects belonging to one of the given domains.
+        Separate them via comma if passing via environment variable
+        ({project_domain_env_var}). If no domains are specified all readable projects
+        are exported.""",
+    )
+    parser.add_argument(
         "-s",
         "--start",
         type=valid_date,
@@ -286,7 +341,7 @@ def main():
 
     if args.dummy_data:
         logging.info("Using dummy export with data from %s", args.dummy_data.name)
-        exporter = DummyExporter(args.dummy_data)
+        exporter = DummyExporter(args.dummy_data, args.domain)
     elif getenv(dummy_file_env_var):
         logging.info("Using dummy export with data from %s", getenv(dummy_file_env_var))
         # if the default dummy data have been used we need to open them, argparse

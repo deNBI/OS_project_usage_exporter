@@ -2,18 +2,24 @@
 # enter the project name in square brackets
 # project_id will be the last 16 chars of its SHA256
 [admin]
-
+# domain_id will be the last 16 chars of its SHA256
+domain = 'domainA'
 # minimal information, this machine will be considered started the moment the
 # information are parsed
-test1 = {ram = 128, cpus = 2}
-# machine will be considered booted at the given time, may be in the future
-test2 = {ram = 256, cpus = 2, uptime = 2018-11-26T14:30:00Z}
-# this machine is considered offline, will not be calculated
-# they are currently ignored, yet remain in case of changes
-test3 = {ram = 256, cpus = 2, uptime = false}
-# considered online in between the two given timestamps
-test4 = {ram = 8192, cpus = 24, uptime = [2018-11-27T14:00:00Z, 2018-11-27T15:00:10Z]}
+machines = [
+  {ram = 128, cpus = 2},
+  # machine will be considered booted at the given time, may be in the future
+  {ram = 256, cpus = 2, uptime = 2018-11-26T14:30:00Z},
+  # this machine is considered offline, will not be calculated
+  # they are currently ignored, yet remain in case of changes
+  {ram = 256, cpus = 2, uptime = false},
+  # considered online in between the two given timestamps
+  {ram = 8192, cpus = 24, uptime = [2018-11-27T14:00:00Z, 2018-11-27T15:00:10Z]},
+]
 
 [demo]
-test1 = {ram=2048, cpus=8, uptime=true}
-test2 = {ram=4096, cpus=8, uptime=true}
+domain = 'domainB'
+machines = [
+  {ram=2048, cpus=8, uptime=true},
+  {ram=4096, cpus=8, uptime=true},
+]
