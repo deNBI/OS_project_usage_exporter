@@ -307,10 +307,16 @@ class DummyExporter(_ExporterBase):
                     machines=machines,
                 )
             )
+        self.update()
 
     def update(self) -> None:
         for project in self.projects:
             if self.domains and project.domain_name not in self.domains:
+                logging.info(
+                    "Skipping exporting project %s since its domain "
+                    "is not requested",
+                    project,
+                )
                 continue
             project_usages = [machine.usage_value() for machine in project.machines]
             vcpu_hours = sum(usage.vcpu_hours for usage in project_usages)
