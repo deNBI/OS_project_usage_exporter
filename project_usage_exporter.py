@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """
-Query project usage from an openstack instance and provide it in a prometheus compatible
+Query project usages from an openstack instance and provide it in a prometheus compatible
 format.
-
-Read-only access to the openstack-APIs `list_projects` and `/os-simple-tenant-usages` is
-needed.
+Alternatively develop in local mode and emulate machines and projects.
 """
 
 from argparse import (
@@ -110,7 +108,10 @@ class OpenstackExporter(_ExporterBase):
         try:
             self.cloud = openstack.connect()
         except keystoneauth1.exceptions.auth_plugins.MissingRequiredOptions:
-            logging.exception("Could not authenticate against OpenStack, Aborting!")
+            logging.exception(
+                "Could not authenticate against OpenStack, Aborting! "
+                "See following traceback."
+            )
             logging.info("Consider using the dummy mode for testing")
             raise ValueError
         self.update()
@@ -407,8 +408,11 @@ def main():
         with open(getenv(dummy_file_env_var)) as file:
             exporter = DummyExporter(file, args.domain)
     else:
-        logging.info("Using regular openstack exporter")
-        exporter = OpenstackExporter(domains=args.domain, stats_start=args.start)
+        try:
+            logging.info("Using regular openstack exporter")
+            exporter = OpenstackExporter(domains=args.domain, stats_start=args.start)
+        except ValueError:
+            return 1
     logging.info("Beginning to serve metrics on port 8080")
     prometheus_client.start_http_server(8080)
     while True:
