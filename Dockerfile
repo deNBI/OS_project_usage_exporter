@@ -6,4 +6,4 @@ WORKDIR /code
 RUN pip install pipenv && pipenv install --system --deploy --ignore-pipfile
 
 EXPOSE 8080
-CMD ["python", "tenant_usage_exporter.py"]
+CMD ["python", "project_usage_exporter.py"]
