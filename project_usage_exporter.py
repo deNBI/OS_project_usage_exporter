@@ -216,7 +216,7 @@ class DummyMachine:
     Representing a dummy machine causing usage to monitor.
     :param name: Currently not used outside but might be in future, therefore leave it
     :param cpus: Number of cpus the dummy machine is using.
-    :param ram: Amount of RAM [mb] the machine is using.
+    :param ram: Amount of RAM [GiB] the machine is using.
     :param uptime: Determines whether the machine is *up* and its usage so far. In case
     of True the machine is considered booted up the instant this script is started. In
     case of False it hasn't been booted ever (no actual use case).
@@ -228,7 +228,7 @@ class DummyMachine:
     """
 
     cpus: int = 4
-    ram: int = 8192
+    ram: int = 8
     uptime: Union[bool, datetime, Tuple[datetime, datetime]] = True
 
     def __post_init__(self) -> None:
@@ -254,6 +254,10 @@ class DummyMachine:
                 f"Invalid type for param `uptime` (got {type(self.uptime)}"
             )
 
+    @property
+    def ram_mb(self) -> int:
+        return self.ram * 1024
+
     def usage_value(self) -> UsageTuple:
         """
         Returns the total ram and cpu usage counted in hours of this machine, depending
@@ -264,14 +268,14 @@ class DummyMachine:
             return UsageTuple(0, 0)
         elif self.uptime_information is UptimeInformation.SINCE_SCRIPT_START:
             hours_uptime = (datetime.now() - script_start) / hour_timedelta
-            return UsageTuple(self.cpus * hours_uptime, self.ram * hours_uptime)
+            return UsageTuple(self.cpus * hours_uptime, self.ram_mb * hours_uptime)
         elif self.uptime_information is UptimeInformation.SINCE_DATETIME:
             # to satisfy `mypy` type checker
             boot_datetime = cast(datetime, self.uptime)
             hours_uptime = (now - boot_datetime.replace(tzinfo=None)) / hour_timedelta
             # do not report negative usage in case the machine is not *booted yet*
             if hours_uptime > 0:
-                return UsageTuple(self.cpus * hours_uptime, self.ram * hours_uptime)
+                return UsageTuple(self.cpus * hours_uptime, self.ram_mb * hours_uptime)
             else:
                 return UsageTuple(0, 0)
         else:
@@ -288,7 +292,7 @@ class DummyMachine:
             else:
                 # machine booted in the past but is still running
                 hours_uptime = (now - boot_datetime) / hour_timedelta
-            return UsageTuple(self.cpus * hours_uptime, self.ram * hours_uptime)
+            return UsageTuple(self.cpus * hours_uptime, self.ram_mb * hours_uptime)
 
 
 class DummyExporter(_ExporterBase):
