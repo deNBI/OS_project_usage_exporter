@@ -28,7 +28,7 @@ variables.
 ```
 usage: project_usage_exporter.py [-h] [-d DUMMY_DATA]
                                  [--domain [DOMAIN [DOMAIN ...]]] [-s START]
-                                 [-i UPDATE_INTERVAL]
+                                 [-i UPDATE_INTERVAL] [-p PORT]
 
 Query project usages from an openstack instance and provide it in a prometheus
 compatible format. Alternatively develop in local mode and emulate machines
@@ -52,13 +52,14 @@ optional arguments:
   -s START, --start START
                         Beginning time of stats (YYYY-MM-DD). If set the value
                         of USAGE_EXPORTER_START_DATE is used. Uses maya for
-                        parsing. (default: 2018-12-11 12:56:19.204268)
+                        parsing. (default: 2018-12-12 13:37:47.437867)
   -i UPDATE_INTERVAL, --update-interval UPDATE_INTERVAL
                         Time to sleep between intervals, in case the calls
                         cause to much load on your openstack instance.
                         Defaults to the value of
                         $USAGE_EXPORTER_UPDATE_INTERVAL or 300 (in seconds)
                         (default: 300)
+  -p PORT, --port PORT  Port to provide metrics on (default: 8080)
 
 MIT @ tluettje
 ```

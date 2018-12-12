@@ -406,6 +406,9 @@ def main():
         your openstack instance. Defaults to the value of ${update_interval_env_var} or
         300 (in seconds)""",
     )
+    parser.add_argument(
+        "-p", "--port", type=int, default=8080, help="Port to provide metrics on"
+    )
     args = parser.parse_args()
 
     if args.dummy_data:
@@ -423,8 +426,8 @@ def main():
             exporter = OpenstackExporter(domains=args.domain, stats_start=args.start)
         except ValueError:
             return 1
-    logging.info("Beginning to serve metrics on port 8080")
-    prometheus_client.start_http_server(8080)
+    logging.info(f"Beginning to serve metrics on port {args.port}")
+    prometheus_client.start_http_server(args.port)
     while True:
         try:
             sleep(args.update_interval)
