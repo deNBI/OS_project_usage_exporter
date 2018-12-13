@@ -61,7 +61,7 @@ optional arguments:
                         (default: 300)
   -p PORT, --port PORT  Port to provide metrics on (default: 8080)
 
-MIT @ tluettje
+GNU AGPLv3 @ tluettje
 ```
 
 ## Development mode/Preview

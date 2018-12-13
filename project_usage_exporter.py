@@ -57,7 +57,7 @@ project_metrics = {
 }
 
 __author__ = "tluettje"
-__license__ = "MIT"
+__license__ = "GNU AGPLv3"
 
 # Environment variables for usage inside docker
 start_date_env_var = "USAGE_EXPORTER_START_DATE"
