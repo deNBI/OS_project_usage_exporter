@@ -27,7 +27,8 @@ variables.
 
 ```
 usage: project_usage_exporter.py [-h] [-d DUMMY_DATA]
-                                 [--domain [DOMAIN [DOMAIN ...]]] [-s START]
+                                 [--domain [DOMAIN [DOMAIN ...]]]
+                                 [--domain-id DOMAIN_ID] [-s START]
                                  [-i UPDATE_INTERVAL] [-p PORT]
 
 Query project usages from an openstack instance and provide it in a prometheus
@@ -39,24 +40,30 @@ optional arguments:
   -d DUMMY_DATA, --dummy-data DUMMY_DATA
                         Use dummy values instead of connecting to an openstack
                         instance. Usage values are calculated base on the
-                        configured existence, take a look at the example file for
-                        an explanation resources/dummy_machines.toml. Can also
-                        be provided via environment variable
-                        USAGE_EXPORTER_DUMMY_FILE (default: None)
+                        configured existence, take a look at the example file
+                        for an explanation resources/dummy_machines.toml. Can
+                        also be provided via environment variable
+                        $USAGE_EXPORTER_DUMMY_FILE (default: None)
   --domain [DOMAIN [DOMAIN ...]]
                         Only export usages of projects belonging to one of the
                         given domains. Separate them via comma if passing via
-                        environment variable (USAGE_EXPORTER_PROJECT_DOMAINS).
+                        environment variable $USAGE_EXPORTER_PROJECT_DOMAINS.
                         If no domains are specified all readable projects are
                         exported. (default: ['elixir'])
+  --domain-id DOMAIN_ID
+                        Only export usages of projects belonging to the domain
+                        identified by the given ID. Takes precedence over any
+                        specified domain and default values. Can also be set
+                        via $USAGE_EXPORTER_PROJECT_DOMAIN_ID (default: )
   -s START, --start START
                         Beginning time of stats (YYYY-MM-DD). If set the value
-                        of USAGE_EXPORTER_START_DATE is used. Uses maya for
-                        parsing. (default: 2018-12-12 13:37:47.437867)
+                        of environment variable $USAGE_EXPORTER_START_DATE is
+                        used. Uses maya for parsing. (default: 2019-01-30
+                        15:29:32.363451)
   -i UPDATE_INTERVAL, --update-interval UPDATE_INTERVAL
                         Time to sleep between intervals, in case the calls
                         cause to much load on your openstack instance.
-                        Defaults to the value of
+                        Defaults to the value of environment variable
                         $USAGE_EXPORTER_UPDATE_INTERVAL or 300 (in seconds)
                         (default: 300)
   -p PORT, --port PORT  Port to provide metrics on (default: 8080)

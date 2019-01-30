@@ -67,6 +67,9 @@ update_interval_env_var = "USAGE_EXPORTER_UPDATE_INTERVAL"
 project_domain_env_var = "USAGE_EXPORTER_PROJECT_DOMAINS"
 default_project_domains = ["elixir"]
 
+# id of the domain whose projects should be exported
+project_domain_id_env_var = "USAGE_EXPORTER_PROJECT_DOMAIN_ID"
+
 dummy_file_env_var = "USAGE_EXPORTER_DUMMY_FILE"
 
 default_dummy_file = "resources/dummy_machines.toml"
@@ -99,9 +102,13 @@ class _ExporterBase:
 
 class OpenstackExporter(_ExporterBase):
     def __init__(
-        self, stats_start: datetime = datetime.today(), domains: Iterable[str] = None
+        self,
+        stats_start: datetime = datetime.today(),
+        domains: Iterable[str] = None,
+        domain_id: Optional[str] = None,
     ) -> None:
         self.domains = set(domains) if domains else None
+        self.domain_id = domain_id
         self.projects: Set[OpenstackProject] = set()
         self.stats_start = stats_start
         self.simple_project_usages = None
@@ -149,7 +156,9 @@ class OpenstackExporter(_ExporterBase):
                 project_usage = json_payload["tenant_usage"]  # type: ignore
                 if not project_usage:
                     logging.info(
-                        "Project %s has no running projects, skipping", project
+                        "Project %s has no existing projects (in the requested date "
+                        "range), skipping",
+                        project,
                     )
                     continue
             except KeyError:
@@ -169,7 +178,17 @@ class OpenstackExporter(_ExporterBase):
 
     def collect_projects(self) -> Set[OpenstackProject]:
         projects: Set[OpenstackProject] = set()
-        if self.domains:
+        if self.domain_id:
+            for project in self.cloud.list_projects(domain_id=self.domain_id):
+                projects.add(
+                    OpenstackProject(
+                        id=project.id,
+                        name=project.name,
+                        domain_name="UNKNOWN",
+                        domain_id=self.domain_id,
+                    )
+                )
+        elif self.domains:
             for domain_name in self.domains:
                 domain = self.cloud.get_domain(name_or_id=domain_name)
                 if not domain:
@@ -187,7 +206,6 @@ class OpenstackExporter(_ExporterBase):
                             domain_id=domain.id,
                         )
                     )
-            return projects
         else:
             for project in self.cloud.list_projects():
                 projects.add(
@@ -296,7 +314,7 @@ class DummyMachine:
                 # machine did run already and is considered down
                 hours_existence = (shutdown_datetime - boot_datetime) / hour_timedelta
             else:
-                # machine booted in the past but is still running
+                # machine booted in the past but is still existing
                 hours_existence = (now - boot_datetime) / hour_timedelta
             return UsageTuple(
                 self.cpus * hours_existence, self.ram_mb * hours_existence
@@ -304,9 +322,15 @@ class DummyMachine:
 
 
 class DummyExporter(_ExporterBase):
-    def __init__(self, dummy_values: TextIO, domains: Iterable[str] = None) -> None:
+    def __init__(
+        self,
+        dummy_values: TextIO,
+        domains: Iterable[str] = None,
+        domain_id: Optional[str] = None,
+    ) -> None:
         self.dummy_values = toml.loads(dummy_values.read())
         self.domains = set(domains) if domains else None
+        self.domain_id = domain_id
         self.projects: List[DummyProject] = []
         for project_name, project_content in self.dummy_values.items():
             machines = [
@@ -323,6 +347,13 @@ class DummyExporter(_ExporterBase):
 
     def update(self) -> None:
         for project in self.projects:
+            if self.domain_id and project.domain_id != self.domain_id:
+                logging.info(
+                    "Skipping exporting project %s since its domain id "
+                    "is not requested",
+                    project,
+                )
+                continue
             if self.domains and project.domain_name not in self.domains:
                 logging.info(
                     "Skipping exporting project %s since its domain "
@@ -379,7 +410,7 @@ def main():
         help=f"""Use dummy values instead of connecting to an openstack instance. Usage
         values are calculated base on the configured existence, take a look at the
         example file for an explanation {default_dummy_file}. Can also be provided via
-        environment variable {dummy_file_env_var}""",
+        environment variable ${dummy_file_env_var}""",
     )
     parser.add_argument(
         "--domain",
@@ -394,16 +425,23 @@ def main():
         nargs="*",
         help=f"""Only export usages of projects belonging to one of the given domains.
         Separate them via comma if passing via environment variable
-        ({project_domain_env_var}). If no domains are specified all readable projects
+        ${project_domain_env_var}. If no domains are specified all readable projects
         are exported.""",
+    )
+    parser.add_argument(
+        "--domain-id",
+        default=getenv(project_domain_id_env_var, ""),
+        help=f"""Only export usages of projects belonging to the domain identified by
+        the given ID. Takes precedence over any specified domain and default values. Can
+        also be set via ${project_domain_id_env_var}""",
     )
     parser.add_argument(
         "-s",
         "--start",
         type=valid_date,
         default=getenv(start_date_env_var, datetime.today()),
-        help=f"""Beginning time of stats (YYYY-MM-DD). If set the value of
-        {start_date_env_var} is used. Uses maya for parsing.""",
+        help=f"""Beginning time of stats (YYYY-MM-DD). If set the value of environment
+        variable ${start_date_env_var} is used. Uses maya for parsing.""",
     )
     parser.add_argument(
         "-i",
@@ -411,8 +449,8 @@ def main():
         type=int,
         default=int(getenv(update_interval_env_var, 300)),
         help=f"""Time to sleep between intervals, in case the calls cause to much load on
-        your openstack instance. Defaults to the value of ${update_interval_env_var} or
-        300 (in seconds)""",
+        your openstack instance. Defaults to the value of environment variable
+        ${update_interval_env_var} or 300 (in seconds)""",
     )
     parser.add_argument(
         "-p", "--port", type=int, default=8080, help="Port to provide metrics on"
@@ -421,17 +459,19 @@ def main():
 
     if args.dummy_data:
         logging.info("Using dummy export with data from %s", args.dummy_data.name)
-        exporter = DummyExporter(args.dummy_data, args.domain)
+        exporter = DummyExporter(args.dummy_data, args.domain, args.domain_id)
     elif getenv(dummy_file_env_var):
         logging.info("Using dummy export with data from %s", getenv(dummy_file_env_var))
         # if the default dummy data have been used we need to open them, argparse
         # hasn't done this for us since the default value has not been a string
         with open(getenv(dummy_file_env_var)) as file:
-            exporter = DummyExporter(file, args.domain)
+            exporter = DummyExporter(file, args.domain, args.domain_id)
     else:
         try:
             logging.info("Using regular openstack exporter")
-            exporter = OpenstackExporter(domains=args.domain, stats_start=args.start)
+            exporter = OpenstackExporter(
+                domains=args.domain, stats_start=args.start, domain_id=args.domain_id
+            )
         except ValueError:
             return 1
     logging.info(f"Beginning to serve metrics on port {args.port}")
