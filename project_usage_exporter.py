@@ -203,8 +203,8 @@ class OpenstackExporter(_ExporterBase):
         return projects
 
 
-class UptimeInformation(Enum):
-    NO_UPTIME = 0
+class ExistenceInformation(Enum):
+    NO_EXISTENCE = 0
     SINCE_SCRIPT_START = 1
     SINCE_DATETIME = 2
     BETWEEN_DATETIMES = 3
@@ -217,7 +217,7 @@ class DummyMachine:
     :param name: Currently not used outside but might be in future, therefore leave it
     :param cpus: Number of cpus the dummy machine is using.
     :param ram: Amount of RAM [GiB] the machine is using.
-    :param uptime: Determines whether the machine is *up* and its usage so far. In case
+    :param existence: Determines whether the machine is *up* and its usage so far. In case
     of True the machine is considered booted up the instant this script is started. In
     case of False it hasn't been booted ever (no actual use case).
     In case of a single datetime the machine is considered *up* since that moment (for
@@ -229,29 +229,29 @@ class DummyMachine:
 
     cpus: int = 4
     ram: int = 8
-    uptime: Union[bool, datetime, Tuple[datetime, datetime]] = True
+    existence: Union[bool, datetime, Tuple[datetime, datetime]] = True
 
     def __post_init__(self) -> None:
         if self.cpus <= 0 or self.ram <= 0:
             raise ValueError("`cpu` and `ram` must be positive")
-        if isinstance(self.uptime, (list, tuple)):
-            if self.uptime[0] > self.uptime[1]:  # type: ignore
+        if isinstance(self.existence, (list, tuple)):
+            if self.existence[0] > self.existence[1]:  # type: ignore
                 raise ValueError(
-                    "First uptime-tuple datetime must be older than second one"
+                    "First existence-tuple datetime must be older than second one"
                 )
             # remove any timezone information
-            self.uptime_information = UptimeInformation.BETWEEN_DATETIMES
-        elif isinstance(self.uptime, datetime):
-            self.uptime_information = UptimeInformation.SINCE_DATETIME
-        elif isinstance(self.uptime, bool):
-            self.uptime_information = (
-                UptimeInformation.SINCE_SCRIPT_START
-                if self.uptime
-                else UptimeInformation.NO_UPTIME
+            self.existence_information = ExistenceInformation.BETWEEN_DATETIMES
+        elif isinstance(self.existence, datetime):
+            self.existence_information = ExistenceInformation.SINCE_DATETIME
+        elif isinstance(self.existence, bool):
+            self.existence_information = (
+                ExistenceInformation.SINCE_SCRIPT_START
+                if self.existence
+                else ExistenceInformation.NO_EXISTENCE
             )
         else:
             raise ValueError(
-                f"Invalid type for param `uptime` (got {type(self.uptime)}"
+                f"Invalid type for param `existence` (got {type(self.existence)}"
             )
 
     @property
@@ -261,26 +261,32 @@ class DummyMachine:
     def usage_value(self) -> UsageTuple:
         """
         Returns the total ram and cpu usage counted in hours of this machine, depending
-        on its `uptime` configuration`
+        on its `existence` configuration`
         """
         now = datetime.now()
-        if self.uptime_information is UptimeInformation.NO_UPTIME:
+        if self.existence_information is ExistenceInformation.NO_EXISTENCE:
             return UsageTuple(0, 0)
-        elif self.uptime_information is UptimeInformation.SINCE_SCRIPT_START:
-            hours_uptime = (datetime.now() - script_start) / hour_timedelta
-            return UsageTuple(self.cpus * hours_uptime, self.ram_mb * hours_uptime)
-        elif self.uptime_information is UptimeInformation.SINCE_DATETIME:
+        elif self.existence_information is ExistenceInformation.SINCE_SCRIPT_START:
+            hours_existence = (datetime.now() - script_start) / hour_timedelta
+            return UsageTuple(
+                self.cpus * hours_existence, self.ram_mb * hours_existence
+            )
+        elif self.existence_information is ExistenceInformation.SINCE_DATETIME:
             # to satisfy `mypy` type checker
-            boot_datetime = cast(datetime, self.uptime)
-            hours_uptime = (now - boot_datetime.replace(tzinfo=None)) / hour_timedelta
+            boot_datetime = cast(datetime, self.existence)
+            hours_existence = (
+                now - boot_datetime.replace(tzinfo=None)
+            ) / hour_timedelta
             # do not report negative usage in case the machine is not *booted yet*
-            if hours_uptime > 0:
-                return UsageTuple(self.cpus * hours_uptime, self.ram_mb * hours_uptime)
+            if hours_existence > 0:
+                return UsageTuple(
+                    self.cpus * hours_existence, self.ram_mb * hours_existence
+                )
             else:
                 return UsageTuple(0, 0)
         else:
             # to satisfy `mypy` type checker
-            runtime_tuple = cast(Tuple[datetime, datetime], self.uptime)
+            runtime_tuple = cast(Tuple[datetime, datetime], self.existence)
             boot_datetime = cast(datetime, runtime_tuple[0].replace(tzinfo=None))
             shutdown_datetime = cast(datetime, runtime_tuple[1].replace(tzinfo=None))
             if boot_datetime > now:
@@ -288,11 +294,13 @@ class DummyMachine:
                 return UsageTuple(0, 0)
             elif shutdown_datetime < now:
                 # machine did run already and is considered down
-                hours_uptime = (shutdown_datetime - boot_datetime) / hour_timedelta
+                hours_existence = (shutdown_datetime - boot_datetime) / hour_timedelta
             else:
                 # machine booted in the past but is still running
-                hours_uptime = (now - boot_datetime) / hour_timedelta
-            return UsageTuple(self.cpus * hours_uptime, self.ram_mb * hours_uptime)
+                hours_existence = (now - boot_datetime) / hour_timedelta
+            return UsageTuple(
+                self.cpus * hours_existence, self.ram_mb * hours_existence
+            )
 
 
 class DummyExporter(_ExporterBase):
@@ -369,8 +377,8 @@ def main():
         "--dummy-data",
         type=FileType(),
         help=f"""Use dummy values instead of connecting to an openstack instance. Usage
-        values are calculated base on the configured uptime, take a look at the example
-        file for an explanation {default_dummy_file}. Can also be provided via
+        values are calculated base on the configured existence, take a look at the
+        example file for an explanation {default_dummy_file}. Can also be provided via
         environment variable {dummy_file_env_var}""",
     )
     parser.add_argument(

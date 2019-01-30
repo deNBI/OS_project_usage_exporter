@@ -39,7 +39,7 @@ optional arguments:
   -d DUMMY_DATA, --dummy-data DUMMY_DATA
                         Use dummy values instead of connecting to an openstack
                         instance. Usage values are calculated base on the
-                        configured uptime, take a look at the example file for
+                        configured existence, take a look at the example file for
                         an explanation resources/dummy_machines.toml. Can also
                         be provided via environment variable
                         USAGE_EXPORTER_DUMMY_FILE (default: None)

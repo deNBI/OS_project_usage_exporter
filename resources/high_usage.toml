@@ -5,12 +5,12 @@
 domain = 'elixir'
 # considered online in between the two given timestamps
 machines = [
-  {ram = 8, cpus = 8, uptime = true},
-  {ram = 8, cpus = 6, uptime = [2018-11-27T14:00:00Z, 2018-12-27T15:00:10Z]},
+  {ram = 8, cpus = 8, existence = true},
+  {ram = 8, cpus = 6, existence = [2018-11-27T14:00:00Z, 2018-12-27T15:00:10Z]},
 ]
 
 [ProjectB]
 domain = 'elixir'
 machines = [
-  {ram=16, cpus=24, uptime = [2018-10-20T00:00:00Z, 2018-11-25T14:30:30Z]},
+  {ram=16, cpus=24, existence = [2018-10-20T00:00:00Z, 2018-11-25T14:30:30Z]},
 ]
