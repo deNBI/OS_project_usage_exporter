@@ -9,8 +9,8 @@ machines = [
   {ram = 8, cpus = 6, existence = [2018-11-27T14:00:00Z, 2018-12-27T15:00:10Z]},
 ]
 
-[ProjectB]
+[credits]
 domain = 'elixir'
 machines = [
-  {ram=16, cpus=24, existence = [2018-10-20T00:00:00Z, 2018-11-25T14:30:30Z]},
+  {ram=32, cpus=24, existence True},
 ]
