@@ -38,6 +38,7 @@ import prometheus_client  # type: ignore
 import keystoneauth1  # type: ignore
 import maya
 import toml
+import ast
 
 # enable logging for now
 format = "%(asctime)s - %(levelname)s [%(name)s] %(threadName)s %(message)s"
@@ -55,6 +56,7 @@ project_metrics = {
         "project_mb_usage", "Total MB usage", labelnames=project_labels
     ),
 }
+HOURS_KEY = "hours"
 
 __author__ = "tluettje"
 __license__ = "GNU AGPLv3"
@@ -62,6 +64,9 @@ __license__ = "GNU AGPLv3"
 # Environment variables for usage inside docker
 start_date_env_var = "USAGE_EXPORTER_START_DATE"
 update_interval_env_var = "USAGE_EXPORTER_UPDATE_INTERVAL"
+simple_vm_project_id = "USAGE_EXPORTER_SIMPLE_VM_PROJECT_ID"
+vcpu_weights = ast.literal_eval("USAGE_EXPORTER_PROJECT_MB_WEIGHTS")
+project_mb_weights = ast.literal_eval("USAGE_EXPORTER_VCPU_WEIGHTS")
 
 # name of the domain whose projects to monitor
 project_domain_env_var = "USAGE_EXPORTER_PROJECT_DOMAINS"
@@ -170,9 +175,23 @@ class OpenstackExporter(_ExporterBase):
                 logging.exception("Received following exception:")
                 continue
 
-            project_usages[project] = {
-                metric: project_usage[metric] for metric in project_metrics
-            }
+            project_usages[project] = {}
+
+            for metric in project_metrics:
+                instance_metric = "_".join(metric.split("_")[1:len(metric.split("_"))-1])
+                total_usage = 0
+                for instance in project_usage:
+                    instance_hours = instance[HOURS_KEY]
+                    if instance_hours > 0:
+                        total_usage += (instance_hours * instance[instance_metric]) * 1 # here set weight
+                if total_usage != project_usage[metric]:
+                    logging.info("Warning the calculated result was un expected.  Metric_usage: %s, Calculates usage: %s", project_usage[metric], total_usage)
+                else:
+                    logging.info("SUCCESS: the new calculation works! %s = %s", project_usage[metric], total_usage)
+
+#            project_usages[project] = {
+#                metric: project_usage[metric] for metric in project_metrics
+#            }
 
         return project_usages
 
@@ -376,6 +395,20 @@ class DummyExporter(_ExporterBase):
                 domain_name=project.domain_name,
                 domain_id=project.domain_id,
             ).set(mb_hours)
+
+
+def get_instance_weight(metric_tag, metric_amount):
+    metric_weights = {}
+    if metric_tag == "vcpu":
+        metric_weights = vcpu_weights
+    elif metric_tag == "memory_mb":
+        metric_weights = project_mb_weights
+    sorted_keys = sorted(metric_weights.keys())
+    max_key = max(sorted_keys)
+    for key in sorted_keys:
+        if metric_amount <= key or max_key == key:
+            return metric_weights[key]
+    return 1
 
 
 @dataclass
