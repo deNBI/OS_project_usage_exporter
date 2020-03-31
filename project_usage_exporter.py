@@ -111,8 +111,8 @@ class OpenstackExporter(_ExporterBase):
         stats_start: datetime = datetime.today(),
         domains: Iterable[str] = None,
         domain_id: Optional[str] = None,
-        vcpu_weights = None,
-        mb_weights = None
+        vcpu_weights = {},
+        mb_weights = {}
     ) -> None:
         self.domains = set(domains) if domains else None
         self.domain_id = domain_id
