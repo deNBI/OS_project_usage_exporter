@@ -65,8 +65,8 @@ __license__ = "GNU AGPLv3"
 start_date_env_var = "USAGE_EXPORTER_START_DATE"
 update_interval_env_var = "USAGE_EXPORTER_UPDATE_INTERVAL"
 simple_vm_project_id = "USAGE_EXPORTER_SIMPLE_VM_PROJECT_ID"
-vcpu_weights = ast.literal_eval("USAGE_EXPORTER_PROJECT_MB_WEIGHTS")
-project_mb_weights = ast.literal_eval("USAGE_EXPORTER_VCPU_WEIGHTS")
+vcpu_weights = "USAGE_EXPORTER_PROJECT_MB_WEIGHTS"
+project_mb_weights = "USAGE_EXPORTER_VCPU_WEIGHTS"
 
 # name of the domain whose projects to monitor
 project_domain_env_var = "USAGE_EXPORTER_PROJECT_DOMAINS"
@@ -111,12 +111,16 @@ class OpenstackExporter(_ExporterBase):
         stats_start: datetime = datetime.today(),
         domains: Iterable[str] = None,
         domain_id: Optional[str] = None,
+        vcpu_weights: Dict[int:int] = None,
+        mb_weights: Dict[int:int] = None
     ) -> None:
         self.domains = set(domains) if domains else None
         self.domain_id = domain_id
         self.projects: Set[OpenstackProject] = set()
         self.stats_start = stats_start
         self.simple_project_usages = None
+        self.vcpu_weights = vcpu_weights
+        self.mb_weights = mb_weights
         try:
             self.cloud = openstack.connect()
         except keystoneauth1.exceptions.auth_plugins.MissingRequiredOptions:
@@ -194,6 +198,23 @@ class OpenstackExporter(_ExporterBase):
 #            }
 
         return project_usages
+
+    def get_instance_weight(self, metric_tag, metric_amount):
+        metric_weights = {}
+        if metric_tag == "vcpu":
+            metric_weights = self.vcpu_weights
+        elif metric_tag == "memory_mb":
+            metric_weights = self.mb_weights
+        if metric_weights != None:
+            sorted_keys = sorted(metric_weights.keys())
+            max_key = max(sorted_keys)
+            for key in sorted_keys:
+                if metric_amount <= key or max_key == key:
+                    return metric_weights[key]
+            logging.info("WARNING: The weight was set to one this should not happen though. Metric: %s, Weights: %s, Amount: %s"
+                         "", metric_tag, str(metric_weights), str(metric_amount))
+            return 1
+        return 1
 
     def collect_projects(self) -> Set[OpenstackProject]:
         projects: Set[OpenstackProject] = set()
@@ -397,20 +418,6 @@ class DummyExporter(_ExporterBase):
             ).set(mb_hours)
 
 
-def get_instance_weight(metric_tag, metric_amount):
-    metric_weights = {}
-    if metric_tag == "vcpu":
-        metric_weights = vcpu_weights
-    elif metric_tag == "memory_mb":
-        metric_weights = project_mb_weights
-    sorted_keys = sorted(metric_weights.keys())
-    max_key = max(sorted_keys)
-    for key in sorted_keys:
-        if metric_amount <= key or max_key == key:
-            return metric_weights[key]
-    return 1
-
-
 @dataclass
 class DummyProject:
     name: str
@@ -469,6 +476,24 @@ def main():
         also be set via ${project_domain_id_env_var}""",
     )
     parser.add_argument(
+        "--vcpu-weights",
+        default=getenv(vcpu_weights, ""),
+        type=str,
+        help=f"""Use weights for different numbers of cpus in a vm. Value is given as
+         the string representation of a dictionary with ints as keys and as values.
+         a weight of 1 means no change. Above 1 its more expensive, under one it is less 
+         expensive. Not available with dummy mode. Can also be set via ${vcpu_weights}""",
+    )
+    parser.add_argument(
+        "--mb-weights",
+        default=getenv(project_mb_weights, ""),
+        type=str,
+        help=f"""Use weights for different numbers of mb (of ram) in a vm. Value is given as
+         the string representation of a dictionary with ints as keys and as values.
+         a weight of 1 means no change. Above 1 its more expensive, under one it is less 
+         expensive. Not available with dummy mode. Can also be set via ${project_mb_weights}""",
+    )
+    parser.add_argument(
         "-s",
         "--start",
         type=valid_date,
@@ -503,7 +528,8 @@ def main():
         try:
             logging.info("Using regular openstack exporter")
             exporter = OpenstackExporter(
-                domains=args.domain, stats_start=args.start, domain_id=args.domain_id
+                domains=args.domain, stats_start=args.start, domain_id=args.domain_id,
+                vcpu_weights=ast.literal_eval(args.vcpu_weights), mb_weights=ast.literal_eval(args.mb_weights)
             )
         except ValueError:
             return 1
