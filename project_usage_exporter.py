@@ -184,7 +184,7 @@ class OpenstackExporter(_ExporterBase):
             for metric in project_metrics:
                 instance_metric = "_".join(metric.split("_")[1:len(metric.split("_"))-1])
                 total_usage = 0
-                for instance in project_usage:
+                for instance in project_usage["server_usages"]:
                     instance_hours = instance[HOURS_KEY]
                     if instance_hours > 0:
                         total_usage += (instance_hours * instance[instance_metric]) * 1 # here set weight
