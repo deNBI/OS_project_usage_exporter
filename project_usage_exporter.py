@@ -65,8 +65,8 @@ __license__ = "GNU AGPLv3"
 start_date_env_var = "USAGE_EXPORTER_START_DATE"
 update_interval_env_var = "USAGE_EXPORTER_UPDATE_INTERVAL"
 simple_vm_project_id = "USAGE_EXPORTER_SIMPLE_VM_PROJECT_ID"
-vcpu_weights_env_var = "USAGE_EXPORTER_PROJECT_MB_WEIGHTS"
-project_mb_weights_env_var = "USAGE_EXPORTER_VCPU_WEIGHTS"
+vcpu_weights_env_var = "USAGE_EXPORTER_VCPU_WEIGHTS"
+project_mb_weights_env_var = "USAGE_EXPORTER_PROJECT_MB_WEIGHTS"
 
 # name of the domain whose projects to monitor
 project_domain_env_var = "USAGE_EXPORTER_PROJECT_DOMAINS"
