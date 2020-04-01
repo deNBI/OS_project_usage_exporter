@@ -111,8 +111,8 @@ class OpenstackExporter(_ExporterBase):
         stats_start: datetime = datetime.today(),
         domains: Iterable[str] = None,
         domain_id: Optional[str] = None,
-        vcpu_weights = None,
-        mb_weights = None
+        vcpu_weights=None,
+        mb_weights=None
     ) -> None:
         self.domains = set(domains) if domains else None
         self.domain_id = domain_id
@@ -210,6 +210,7 @@ class OpenstackExporter(_ExporterBase):
             metric_weights = self.mb_weights
         if metric_weights is not None:
             sorted_keys = sorted(metric_weights.keys())
+            logging.info("reached here")
             max_key = max(sorted_keys)
             for key in sorted_keys:
                 if metric_amount <= key or max_key == key:
