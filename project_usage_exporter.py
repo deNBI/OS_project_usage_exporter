@@ -204,7 +204,7 @@ class OpenstackExporter(_ExporterBase):
 
     def get_instance_weight(self, metric_tag, metric_amount):
         metric_weights = None
-        if metric_tag == "vcpu":
+        if metric_tag == "vcpus":
             metric_weights = self.vcpu_weights
         elif metric_tag == "memory_mb":
             metric_weights = self.mb_weights
