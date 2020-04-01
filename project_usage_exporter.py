@@ -210,7 +210,7 @@ class OpenstackExporter(_ExporterBase):
             metric_weights = self.mb_weights
         if metric_weights is not None:
             sorted_keys = sorted(metric_weights.keys())
-            logging.info("reached here")
+            logging.info("reached here with keys: %s, complete metric: %s ", sorted_keys, metric_weights)
             max_key = max(sorted_keys)
             for key in sorted_keys:
                 if metric_amount <= key or max_key == key:
