@@ -486,7 +486,7 @@ def main():
         help=f"""Use weights for different numbers of cpus in a vm. Value is given as
          the string representation of a dictionary with ints as keys and as values.
          a weight of 1 means no change. Above 1 its more expensive, under one it is less 
-         expensive. Not available with dummy mode. Can also be set via ${vcpu_weights}""",
+         expensive. Not available with dummy mode. Can also be set via ${vcpu_weights_env_var}""",
     )
     parser.add_argument(
         "--mb-weights",
@@ -495,7 +495,7 @@ def main():
         help=f"""Use weights for different numbers of mb (of ram) in a vm. Value is given as
          the string representation of a dictionary with ints as keys and as values.
          a weight of 1 means no change. Above 1 its more expensive, under one it is less 
-         expensive. Not available with dummy mode. Can also be set via ${project_mb_weights}""",
+         expensive. Not available with dummy mode. Can also be set via ${project_mb_weights_env_var}""",
     )
     parser.add_argument(
         "-s",
