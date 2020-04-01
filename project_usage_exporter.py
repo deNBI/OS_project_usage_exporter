@@ -203,7 +203,7 @@ class OpenstackExporter(_ExporterBase):
         return project_usages
 
     def get_instance_weight(self, metric_tag, metric_amount):
-        metric_weights = {}
+        metric_weights = None
         if metric_tag == "vcpu":
             metric_weights = self.vcpu_weights
         elif metric_tag == "memory_mb":
@@ -219,6 +219,7 @@ class OpenstackExporter(_ExporterBase):
             logging.info("WARNING: The weight was set to one this should not happen though. Metric: %s, Weights: %s, Amount: %s"
                          "", metric_tag, str(metric_weights), str(metric_amount))
             return 1
+        logging.info("warning could not determine metric: %s", metric_tag)
         return 1
 
     def collect_projects(self) -> Set[OpenstackProject]:
