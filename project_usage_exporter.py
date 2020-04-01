@@ -482,7 +482,7 @@ def main():
     )
     parser.add_argument(
         "--vcpu-weights",
-        default=getenv(vcpu_weights_env_var, ""),
+        default=getenv(vcpu_weights_env_var, "{}"),
         type=str,
         help=f"""Use weights for different numbers of cpus in a vm. Value is given as
          the string representation of a dictionary with ints as keys and as values.
@@ -491,7 +491,7 @@ def main():
     )
     parser.add_argument(
         "--mb-weights",
-        default=getenv(project_mb_weights_env_var, ""),
+        default=getenv(project_mb_weights_env_var, "{}"),
         type=str,
         help=f"""Use weights for different numbers of mb (of ram) in a vm. Value is given as
          the string representation of a dictionary with ints as keys and as values.
@@ -519,7 +519,9 @@ def main():
         "-p", "--port", type=int, default=8080, help="Port to provide metrics on"
     )
     args = parser.parse_args()
-
+    logging.info(str(args.domain))
+    logging.info(str(args.vcpu_weights))
+    logging.info(getenv(vcpu_weights_env_var, "No env variable"))
     if args.dummy_data:
         logging.info("Using dummy export with data from %s", args.dummy_data.name)
         exporter = DummyExporter(args.dummy_data, args.domain, args.domain_id)
@@ -537,7 +539,6 @@ def main():
                 vcpu_weights=ast.literal_eval(args.vcpu_weights), mb_weights=ast.literal_eval(args.mb_weights)
             )
         except ValueError as e:
-            logging.info(e)
             return 1
     logging.info(f"Beginning to serve metrics on port {args.port}")
     prometheus_client.start_http_server(args.port)
