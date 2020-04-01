@@ -189,6 +189,7 @@ class OpenstackExporter(_ExporterBase):
                     instance_hours = instance[HOURS_KEY]
                     if instance_hours > 0:
                         total_usage += (instance_hours * instance[instance_metric]) * 1 # here set weight
+                project_usages[project][metric] = total_usage
                 if total_usage != project_usage[metric]:
                     logging.info("Warning the calculated result was un expected.  Metric_usage: %s, Calculates usage: %s", project_usage[metric], total_usage)
                 else:
