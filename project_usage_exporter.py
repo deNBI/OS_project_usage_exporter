@@ -111,8 +111,8 @@ class OpenstackExporter(_ExporterBase):
         stats_start: datetime = datetime.today(),
         domains: Iterable[str] = None,
         domain_id: Optional[str] = None,
-        vcpu_weights: Dict[int, int] = None,
-        mb_weights: Dict[int, int] = None
+        vcpu_weights = None,
+        mb_weights = None
     ) -> None:
         self.domains = set(domains) if domains else None
         self.domain_id = domain_id
@@ -535,7 +535,8 @@ def main():
                 domains=args.domain, stats_start=args.start, domain_id=args.domain_id,
                 vcpu_weights=ast.literal_eval(args.vcpu_weights), mb_weights=ast.literal_eval(args.mb_weights)
             )
-        except ValueError:
+        except ValueError as e:
+            logging.info(e)
             return 1
     logging.info(f"Beginning to serve metrics on port {args.port}")
     prometheus_client.start_http_server(args.port)
