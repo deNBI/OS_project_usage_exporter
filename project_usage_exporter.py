@@ -64,8 +64,8 @@ __license__ = "GNU AGPLv3"
 # Environment variables for usage inside docker
 start_date_env_var = "USAGE_EXPORTER_START_DATE"
 update_interval_env_var = "USAGE_EXPORTER_UPDATE_INTERVAL"
-simple_vm_project_id = "USAGE_EXPORTER_SIMPLE_VM_PROJECT_ID"
-simple_vm_project_name_tag_env_var = "USAGE_EXORTER_SIMPLE_VM_PROJECT_TAG"
+simple_vm_project_id_env_var = "USAGE_EXPORTER_SIMPLE_VM_PROJECT_ID"
+simple_vm_project_name_tag_env_var = "USAGE_EXPORTER_SIMPLE_VM_PROJECT_TAG"
 vcpu_weights_env_var = "USAGE_EXPORTER_VCPU_WEIGHTS"
 project_mb_weights_env_var = "USAGE_EXPORTER_PROJECT_MB_WEIGHTS"
 
@@ -521,14 +521,14 @@ def main():
     )
     parser.add_argument(
         "--simple-vm-id",
-        default=getenv(simple_vm_project_id, ""),
+        default=getenv(simple_vm_project_id_env_var, ""),
         type=str,
         help=f"""The ID of the Openstack project, that hosts the SimpleVm projects. 
-        Can also be set vis ${simple_vm_project_id}""",
+        Can also be set vis ${simple_vm_project_id_env_var}""",
     )
     parser.add_argument(
         "--simple-vm-tag",
-        default=getenv(simple_vm_project_id, "project_name"),
+        default=getenv(simple_vm_project_name_tag_env_var, "project_name"),
         type=str,
         help=f"""The metadata of the Openstack project, that hosts the SimpleVm projects. It is used
         to differentiate the simple vm projects, default: project_name
