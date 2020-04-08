@@ -185,25 +185,27 @@ class OpenstackExporter(_ExporterBase):
                 logging.exception("Received following exception:")
                 continue
             if project.is_simple_vm_project:
-                simple_vm_project_names = []
-                for instance in project_usage["server_usages"]:
-                    simple_vm_project_name = instance[self.simple_vm_tag]
-                    if simple_vm_project_name not in simple_vm_project_names:
-                        simple_vm_project_names.append(simple_vm_project_name)
-                for simple_vm_project_name in simple_vm_project_names:
-                    project_usages[simple_vm_project_name] = {}
-                    for metric in project_metrics:
-                        instance_metric = "_".join(metric.split("_")[1:len(metric.split("_")) - 1])
-                        total_usage = 0
-                        for instance in project_usage["server_usages"]:
-                            if instance[self.simple_vm_tag] == simple_vm_project_name:
-                                instance_hours = instance[HOURS_KEY]
-                                if instance_hours > 0:
-                                    metric_amount = instance[instance_metric]
-                                    total_usage += (instance_hours * metric_amount) * self.get_instance_weight(
-                                        instance_metric, metric_amount)
-                        project_usages[simple_vm_project_name][metric] = total_usage
-
+                if self.simple_vm_tag is None:
+                    logging.error("The simple vm tag is not set, please set the simple vm metadata tag for simple vm tracking")
+                else:
+                    simple_vm_project_names = []
+                    for instance in project_usage["server_usages"]:
+                        simple_vm_project_name = instance[self.simple_vm_tag]
+                        if simple_vm_project_name not in simple_vm_project_names:
+                            simple_vm_project_names.append(simple_vm_project_name)
+                    for simple_vm_project_name in simple_vm_project_names:
+                        project_usages[simple_vm_project_name] = {}
+                        for metric in project_metrics:
+                            instance_metric = "_".join(metric.split("_")[1:len(metric.split("_")) - 1])
+                            total_usage = 0
+                            for instance in project_usage["server_usages"]:
+                                if instance[self.simple_vm_tag] == simple_vm_project_name:
+                                    instance_hours = instance[HOURS_KEY]
+                                    if instance_hours > 0:
+                                        metric_amount = instance[instance_metric]
+                                        total_usage += (instance_hours * metric_amount) * self.get_instance_weight(
+                                            instance_metric, metric_amount)
+                            project_usages[simple_vm_project_name][metric] = total_usage
             else:
                 project_usages[project] = {}
                 for metric in project_metrics:
@@ -271,16 +273,16 @@ class OpenstackExporter(_ExporterBase):
 
 
 def add_project(id, name, domain_name, domain_id, simple_vm_id, projects):
-    is_simple_vm = False
+    is_simple_vm_project = False
     if id == simple_vm_id:
-        is_simple_vm = True
+        is_simple_vm_project = True
     projects.add(
         OpenstackProject(
             id=id,
             name=name,
             domain_name=domain_name,
             domain_id=domain_id,
-            is_simple_vm=is_simple_vm,
+            is_simple_vm_project=is_simple_vm_project,
         )
     )
 
