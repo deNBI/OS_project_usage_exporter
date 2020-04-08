@@ -65,6 +65,7 @@ __license__ = "GNU AGPLv3"
 start_date_env_var = "USAGE_EXPORTER_START_DATE"
 update_interval_env_var = "USAGE_EXPORTER_UPDATE_INTERVAL"
 simple_vm_project_id = "USAGE_EXPORTER_SIMPLE_VM_PROJECT_ID"
+simple_vm_project_name_tag_env_var = "USAGE_EXORTER_SIMPLE_VM_PROJECT_TAG"
 vcpu_weights_env_var = "USAGE_EXPORTER_VCPU_WEIGHTS"
 project_mb_weights_env_var = "USAGE_EXPORTER_PROJECT_MB_WEIGHTS"
 
@@ -98,6 +99,7 @@ class OpenstackProject:
     name: str
     domain_name: str
     domain_id: str
+    is_simple_vm_project: bool
 
 
 class _ExporterBase:
@@ -112,7 +114,9 @@ class OpenstackExporter(_ExporterBase):
         domains: Iterable[str] = None,
         domain_id: Optional[str] = None,
         vcpu_weights=None,
-        mb_weights=None
+        mb_weights=None,
+        simple_vm_project="",
+        simple_vm_tag=None
     ) -> None:
         self.domains = set(domains) if domains else None
         self.domain_id = domain_id
@@ -121,6 +125,8 @@ class OpenstackExporter(_ExporterBase):
         self.simple_project_usages = None
         self.vcpu_weights = vcpu_weights
         self.mb_weights = mb_weights
+        self.simple_vm_project = simple_vm_project
+        self.simple_vm_tag = simple_vm_tag
         try:
             self.cloud = openstack.connect()
         except keystoneauth1.exceptions.auth_plugins.MissingRequiredOptions:
@@ -178,27 +184,46 @@ class OpenstackExporter(_ExporterBase):
             except BaseException:
                 logging.exception("Received following exception:")
                 continue
-
-            project_usages[project] = {}
-
-            for metric in project_metrics:
-                instance_metric = "_".join(metric.split("_")[1:len(metric.split("_"))-1])
-                total_usage = 0
+            if project.is_simple_vm_project:
+                simple_vm_project_names = []
                 for instance in project_usage["server_usages"]:
-                    instance_hours = instance[HOURS_KEY]
-                    if instance_hours > 0:
-                        metric_amount = instance[instance_metric]
-                        total_usage += (instance_hours * metric_amount) * self.get_instance_weight(instance_metric, metric_amount)
-                project_usages[project][metric] = total_usage
-                """
-                if total_usage != project_usage[metric]:
-                    logging.info("Warning the calculated result was un expected.  Metric_usage: %s, Calculates usage: %s", project_usage[metric], total_usage)
-                else:
-                    logging.info("SUCCESS: the new calculation works! %s = %s", project_usage[metric], total_usage)
-                """
-#            project_usages[project] = {
-#                metric: project_usage[metric] for metric in project_metrics
-#            }
+                    simple_vm_project_name = instance[self.simple_vm_tag]
+                    if simple_vm_project_name not in simple_vm_project_names:
+                        simple_vm_project_names.append(simple_vm_project_name)
+                for simple_vm_project_name in simple_vm_project_names:
+                    project_usages[simple_vm_project_name] = {}
+                    for metric in project_metrics:
+                        instance_metric = "_".join(metric.split("_")[1:len(metric.split("_")) - 1])
+                        total_usage = 0
+                        for instance in project_usage["server_usages"]:
+                            if instance[self.simple_vm_tag] == simple_vm_project_name:
+                                instance_hours = instance[HOURS_KEY]
+                                if instance_hours > 0:
+                                    metric_amount = instance[instance_metric]
+                                    total_usage += (instance_hours * metric_amount) * self.get_instance_weight(
+                                        instance_metric, metric_amount)
+                        project_usages[simple_vm_project_name][metric] = total_usage
+
+            else:
+                project_usages[project] = {}
+                for metric in project_metrics:
+                    instance_metric = "_".join(metric.split("_")[1:len(metric.split("_"))-1])
+                    total_usage = 0
+                    for instance in project_usage["server_usages"]:
+                        instance_hours = instance[HOURS_KEY]
+                        if instance_hours > 0:
+                            metric_amount = instance[instance_metric]
+                            total_usage += (instance_hours * metric_amount) * self.get_instance_weight(instance_metric, metric_amount)
+                    project_usages[project][metric] = total_usage
+                    """
+                    if total_usage != project_usage[metric]:
+                        logging.info("Warning the calculated result was un expected.  Metric_usage: %s, Calculates usage: %s", project_usage[metric], total_usage)
+                    else:
+                        logging.info("SUCCESS: the new calculation works! %s = %s", project_usage[metric], total_usage)
+                    """
+    #            project_usages[project] = {
+    #                metric: project_usage[metric] for metric in project_metrics
+    #            }
 
         return project_usages
 
@@ -226,14 +251,7 @@ class OpenstackExporter(_ExporterBase):
         projects: Set[OpenstackProject] = set()
         if self.domain_id:
             for project in self.cloud.list_projects(domain_id=self.domain_id):
-                projects.add(
-                    OpenstackProject(
-                        id=project.id,
-                        name=project.name,
-                        domain_name="UNKNOWN",
-                        domain_id=self.domain_id,
-                    )
-                )
+                add_project(project.id, project.name, self.domain_id, "UNKNOWN", self.simple_vm_project, projects)
         elif self.domains:
             for domain_name in self.domains:
                 domain = self.cloud.get_domain(name_or_id=domain_name)
@@ -244,27 +262,27 @@ class OpenstackExporter(_ExporterBase):
                     )
                     continue
                 for project in self.cloud.list_projects(domain_id=domain.id):
-                    projects.add(
-                        OpenstackProject(
-                            id=project.id,
-                            name=project.name,
-                            domain_name=domain.name,
-                            domain_id=domain.id,
-                        )
-                    )
+                    add_project(project.id, project.name, self.domain_id, domain.name, self.simple_vm_project, projects)
         else:
             for project in self.cloud.list_projects():
-                projects.add(
-                    OpenstackProject(
-                        id=project.id,
-                        name=project.name,
-                        domain_name=self.cloud.get_domain(
-                            name_or_id=project.domain_id
-                        ).name,
-                        domain_id=project.domain_id,
-                    )
-                )
+                domain_name = self.cloud.get_domain(name_or_id=project.domain_id).name
+                add_project(project.id, project.name, project.domain_id, domain_name, self.simple_vm_project, projects)
         return projects
+
+
+def add_project(id, name, domain_name, domain_id, simple_vm_id, projects):
+    is_simple_vm = False
+    if id == simple_vm_id:
+        is_simple_vm = True
+    projects.add(
+        OpenstackProject(
+            id=id,
+            name=name,
+            domain_name=domain_name,
+            domain_id=domain_id,
+            is_simple_vm=is_simple_vm,
+        )
+    )
 
 
 class ExistenceInformation(Enum):
@@ -500,6 +518,22 @@ def main():
          expensive. Not available with dummy mode. Can also be set via ${project_mb_weights_env_var}""",
     )
     parser.add_argument(
+        "--simple-vm-id",
+        default=getenv(simple_vm_project_id, ""),
+        type=str,
+        help=f"""The ID of the Openstack project, that hosts the SimpleVm projects. 
+        Can also be set vis ${simple_vm_project_id}""",
+    )
+    parser.add_argument(
+        "--simple-vm-tag",
+        default=getenv(simple_vm_project_id, "project_name"),
+        type=str,
+        help=f"""The metadata of the Openstack project, that hosts the SimpleVm projects. It is used
+        to differentiate the simple vm projects, default: project_name
+        Can also be set vis ${simple_vm_project_name_tag_env_var}""",
+    )
+
+    parser.add_argument(
         "-s",
         "--start",
         type=valid_date,
@@ -537,7 +571,8 @@ def main():
             logging.info("Using regular openstack exporter")
             exporter = OpenstackExporter(
                 domains=args.domain, stats_start=args.start, domain_id=args.domain_id,
-                vcpu_weights=ast.literal_eval(args.vcpu_weights), mb_weights=ast.literal_eval(args.mb_weights)
+                vcpu_weights=ast.literal_eval(args.vcpu_weights), mb_weights=ast.literal_eval(args.mb_weights),
+                simple_vm_project=args.simple_vm_id, simple_vm_tag=args.simple_vm_tag
             )
         except ValueError as e:
             return 1
