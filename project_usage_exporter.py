@@ -188,18 +188,20 @@ class OpenstackExporter(_ExporterBase):
                 if self.simple_vm_tag is None:
                     logging.error("The simple vm tag is not set, please set the simple vm metadata tag for simple vm tracking")
                 else:
-                    simple_vm_project_names = []
-                    for instance in project_usage["server_usages"]:
-                        simple_vm_project_name = instance[self.simple_vm_tag]
-                        if simple_vm_project_name not in simple_vm_project_names:
-                            simple_vm_project_names.append(simple_vm_project_name)
+                    json_payload_metadata = self.cloud.compute.get(  # type: ignore
+                        f"/servers/detail?all_tenants=true&project_id=" + project.id
+                    ).json()
+                    instance_id_to_project_dict = {}
+                    for instance in json_payload_metadata['servers']:
+                        instance_id_to_project_dict[instance['id']] = instance['metadata'][self.simple_vm_tag]
+                    simple_vm_project_names = list(set(instance_id_to_project_dict.values()))
                     for simple_vm_project_name in simple_vm_project_names:
                         project_usages[simple_vm_project_name] = {}
                         for metric in project_metrics:
                             instance_metric = "_".join(metric.split("_")[1:len(metric.split("_")) - 1])
                             total_usage = 0
                             for instance in project_usage["server_usages"]:
-                                if instance[self.simple_vm_tag] == simple_vm_project_name:
+                                if instance_id_to_project_dict[instance["id"]] == simple_vm_project_name:
                                     instance_hours = instance[HOURS_KEY]
                                     if instance_hours > 0:
                                         metric_amount = instance[instance_metric]
