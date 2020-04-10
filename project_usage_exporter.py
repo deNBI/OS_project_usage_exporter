@@ -196,7 +196,14 @@ class OpenstackExporter(_ExporterBase):
                         instance_id_to_project_dict[instance['id']] = instance['metadata'][self.simple_vm_tag]
                     simple_vm_project_names = list(set(instance_id_to_project_dict.values()))
                     for simple_vm_project_name in simple_vm_project_names:
-                        project_usages[simple_vm_project_name] = {}
+                        svm_project = OpenstackProject(
+                            id=project.id,
+                            name=simple_vm_project_name,
+                            domain_name=project.domain_name,
+                            domain_id=project.domain_id,
+                            is_simple_vm_project=True,
+                        )
+                        project_usages[svm_project] = {}
                         for metric in project_metrics:
                             instance_metric = "_".join(metric.split("_")[1:len(metric.split("_")) - 1])
                             total_usage = 0
@@ -207,7 +214,7 @@ class OpenstackExporter(_ExporterBase):
                                         metric_amount = instance[instance_metric]
                                         total_usage += (instance_hours * metric_amount) * self.get_instance_weight(
                                             instance_metric, metric_amount)
-                            project_usages[simple_vm_project_name][metric] = total_usage
+                            project_usages[svm_project][metric] = total_usage
             else:
                 project_usages[project] = {}
                 for metric in project_metrics:
