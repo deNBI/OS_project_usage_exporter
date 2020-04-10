@@ -226,15 +226,6 @@ class OpenstackExporter(_ExporterBase):
                             metric_amount = instance[instance_metric]
                             total_usage += (instance_hours * metric_amount) * self.get_instance_weight(instance_metric, metric_amount)
                     project_usages[project][metric] = total_usage
-                    """
-                    if total_usage != project_usage[metric]:
-                        logging.info("Warning the calculated result was un expected.  Metric_usage: %s, Calculates usage: %s", project_usage[metric], total_usage)
-                    else:
-                        logging.info("SUCCESS: the new calculation works! %s = %s", project_usage[metric], total_usage)
-                    """
-    #            project_usages[project] = {
-    #                metric: project_usage[metric] for metric in project_metrics
-    #            }
 
         return project_usages
 
@@ -246,11 +237,9 @@ class OpenstackExporter(_ExporterBase):
             metric_weights = self.mb_weights
         if metric_weights is not None:
             sorted_keys = sorted(metric_weights.keys())
-            logging.info("reached here with keys: %s, complete metric: %s ", sorted_keys, metric_weights)
             max_key = max(sorted_keys)
             for key in sorted_keys:
                 if metric_amount <= key or max_key == key:
-                    logging.info("SUCCESS: Found the right amount: key: %s for instance: %s", key, metric_amount)
                     return metric_weights[key]
             logging.info("WARNING: The weight was set to one this should not happen though. Metric: %s, Weights: %s, Amount: %s"
                          "", metric_tag, str(metric_weights), str(metric_amount))
