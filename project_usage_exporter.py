@@ -201,7 +201,7 @@ class OpenstackExporter(_ExporterBase):
                             instance_metric = "_".join(metric.split("_")[1:len(metric.split("_")) - 1])
                             total_usage = 0
                             for instance in project_usage["server_usages"]:
-                                if instance_id_to_project_dict[instance["id"]] == simple_vm_project_name:
+                                if instance_id_to_project_dict[instance["instance_id"]] == simple_vm_project_name:
                                     instance_hours = instance[HOURS_KEY]
                                     if instance_hours > 0:
                                         metric_amount = instance[instance_metric]
