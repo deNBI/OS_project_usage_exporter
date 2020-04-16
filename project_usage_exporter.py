@@ -554,9 +554,6 @@ def main():
         "-p", "--port", type=int, default=8080, help="Port to provide metrics on"
     )
     args = parser.parse_args()
-    logging.info(str(args.domain))
-    logging.info(str(args.vcpu_weights))
-    logging.info(getenv(vcpu_weights_env_var, "No env variable"))
     if args.dummy_data:
         logging.info("Using dummy export with data from %s", args.dummy_data.name)
         exporter = DummyExporter(args.dummy_data, args.domain, args.domain_id)
