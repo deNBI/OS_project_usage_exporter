@@ -39,6 +39,7 @@ import keystoneauth1  # type: ignore
 import maya
 import toml
 import ast
+import requests
 
 # enable logging for now
 format = "%(asctime)s - %(levelname)s [%(name)s] %(threadName)s %(message)s"
@@ -64,6 +65,8 @@ __license__ = "GNU AGPLv3"
 # Environment variables for usage inside docker
 start_date_env_var = "USAGE_EXPORTER_START_DATE"
 update_interval_env_var = "USAGE_EXPORTER_UPDATE_INTERVAL"
+weights_update_frequency_env_var = "USAGE_EXPORTER_WEIGHT_UPDATE_FREQUENCY"
+weights_update_endpoint_env_var = "USAGE_EXPORTER_WEIGHTS_UPDATE_ENDPOINT"
 simple_vm_project_id_env_var = "USAGE_EXPORTER_SIMPLE_VM_PROJECT_ID"
 simple_vm_project_name_tag_env_var = "USAGE_EXPORTER_SIMPLE_VM_PROJECT_TAG"
 vcpu_weights_env_var = "USAGE_EXPORTER_VCPU_WEIGHTS"
@@ -127,6 +130,10 @@ class OpenstackExporter(_ExporterBase):
         self.mb_weights = mb_weights
         self.simple_vm_project = simple_vm_project
         self.simple_vm_tag = simple_vm_tag
+        if vcpu_weights is not None and mb_weights is not None:
+            self.weights = {datetime.now().timestamp(): {"ram": mb_weights, "vcpu": vcpu_weights}}
+        else:
+            self.weights = None
         try:
             self.cloud = openstack.connect()
         except keystoneauth1.exceptions.auth_plugins.MissingRequiredOptions:
@@ -144,6 +151,9 @@ class OpenstackExporter(_ExporterBase):
             start=self.stats_start.strftime("%Y-%m-%dT%H:%M:%S")
         )
         self.set_metrics()
+
+    def update_weights(self, new_weights) -> None:
+        self.weights = new_weights
 
     def set_metrics(self) -> None:
         for project, usage_values in self.usages.items():
@@ -213,7 +223,7 @@ class OpenstackExporter(_ExporterBase):
                                     if instance_hours > 0:
                                         metric_amount = instance[instance_metric]
                                         total_usage += (instance_hours * metric_amount) * self.get_instance_weight(
-                                            instance_metric, metric_amount)
+                                            instance_metric, metric_amount, instance["started_at"])
                             project_usages[svm_project][metric] = total_usage
             else:
                 project_usages[project] = {}
@@ -229,22 +239,31 @@ class OpenstackExporter(_ExporterBase):
 
         return project_usages
 
-    def get_instance_weight(self, metric_tag, metric_amount):
-        metric_weights = None
-        if metric_tag == "vcpus":
-            metric_weights = self.vcpu_weights
-        elif metric_tag == "memory_mb":
-            metric_weights = self.mb_weights
-        if metric_weights is not None:
-            sorted_keys = sorted(metric_weights.keys())
-            max_key = max(sorted_keys)
-            for key in sorted_keys:
-                if metric_amount <= key or max_key == key:
-                    return metric_weights[key]
-            logging.info("WARNING: The weight was set to one this should not happen though. Metric: %s, Weights: %s, Amount: %s"
-                         "", metric_tag, str(metric_weights), str(metric_amount))
-            return 1
-        logging.info("warning could not determine metric: %s", metric_tag)
+    def get_instance_weight(self, metric_tag, metric_amount, started_date):
+        instance_started_timestamp = datetime.strptime(started_date, "%Y-%m-%dT%H:%M:%S.%f").timestamp()
+        if self.weights is not None:
+            sorted_timestamps = sorted(self.weights.keys())
+            max_timestamp = max(sorted_timestamps)
+            associated_weights = None
+            for timestamp in sorted_timestamps:
+                if instance_started_timestamp <= timestamp or max_timestamp == timestamp:
+                    associated_weights = self.weights[timestamp]
+                    break
+                if associated_weights is not None:
+                    metric_weights = associated_weights[metric_tag]
+                    sorted_keys = sorted(metric_weights.keys())
+                    max_key = max(sorted_keys)
+                    for key in sorted_keys:
+                        if metric_amount <= key or max_key == key:
+                            return metric_weights[key]
+                    logging.info(
+                        "WARNING: The weight was set to 1 this should not happen though. Metric: %s, Weights: %s, Amount: %s"
+                        "", metric_tag, str(metric_weights), str(metric_amount))
+                    return 1
+                else:
+                    logging.info("warning could not determine metric: %s for timestamp %s", self.weights, instance_started_timestamp)
+                    return 1
+        logging.info("Warning: metric is not set: %s", self.weights)
         return 1
 
     def collect_projects(self) -> Set[OpenstackProject]:
@@ -532,7 +551,20 @@ def main():
         to differentiate the simple vm projects, default: project_name
         Can also be set vis ${simple_vm_project_name_tag_env_var}""",
     )
-
+    parser.add_argument(
+        "--weight-update-frequency",
+        type=int,
+        default=int(getenv(weights_update_frequency_env_var, 10)),
+        help=f"""The frequency of checking if there is a weight update. Is  a multiple of the update interval length
+        . Defaults to the value of environment variable ${weights_update_frequency_env_var} or 10""",
+    )
+    parser.add_argument(
+        "--weight-update-endpoint",
+        type=str,
+        default=getenv(weights_update_endpoint_env_var, ""),
+        help=f"""The endpoint url where the current weights can be updated
+        . Defaults to the value of environment variable ${weights_update_endpoint_env_var} or will be left blank""",
+    )
     parser.add_argument(
         "-s",
         "--start",
@@ -575,7 +607,24 @@ def main():
             return 1
     logging.info(f"Beginning to serve metrics on port {args.port}")
     prometheus_client.start_http_server(args.port)
+    laps = args.weight_update_frequency
     while True:
+        if laps >= args.weight_update_frequency and args.weight_update_endpoint != "":
+            try:
+                weight_response = requests.get(args.weight_update_endpoint)
+                current_weights = {
+                    x['resource_set_timestamp']: {'memory_mb': {y['value']: y['weight'] for y in x['ram_weights']},
+                                                  'vcpus': {y['value']: y['weight'] for y in x['vcpu_weights']}} for
+                    x in weight_response.json()}
+                exporter.update_weights(current_weights)
+            except Exception as e:
+                logging.exception(
+                    f"Received exception {e} while trying to update the credit weights, check if credit endpoint {args.weight_update_endpoint}"
+                    f" is accessible or contact the denbi team to check if the weights are set correctly. Traceback following."
+                )
+            laps = 0
+        if args.weight_update_endpoint != "":
+            laps += 1
         try:
             sleep(args.update_interval)
             exporter.update()
