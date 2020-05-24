@@ -249,20 +249,21 @@ class OpenstackExporter(_ExporterBase):
                 if instance_started_timestamp <= timestamp or max_timestamp == timestamp:
                     associated_weights = self.weights[timestamp]
                     break
-                if associated_weights is not None:
-                    metric_weights = associated_weights[metric_tag]
-                    sorted_keys = sorted(metric_weights.keys())
-                    max_key = max(sorted_keys)
-                    for key in sorted_keys:
-                        if metric_amount <= key or max_key == key:
-                            return metric_weights[key]
-                    logging.info(
-                        "WARNING: The weight was set to 1 this should not happen though. Metric: %s, Weights: %s, Amount: %s"
-                        "", metric_tag, str(metric_weights), str(metric_amount))
-                    return 1
-                else:
-                    logging.info("warning could not determine metric: %s for timestamp %s", self.weights, instance_started_timestamp)
-                    return 1
+            if associated_weights is not None:
+                metric_weights = associated_weights[metric_tag]
+                sorted_keys = sorted(metric_weights.keys())
+                max_key = max(sorted_keys)
+                for key in sorted_keys:
+                    if metric_amount <= key or max_key == key:
+                        return metric_weights[key]
+                logging.info(
+                    "WARNING: The weight was set to 1 this should not happen though. Metric: %s, Weights: %s, Amount: %s"
+                    "", metric_tag, str(metric_weights), str(metric_amount))
+                return 1
+            else:
+                logging.info("warning could not determine metric: %s for timestamp %s", self.weights,
+                             instance_started_timestamp)
+                return 1
         logging.info("Warning: metric is not set: %s", self.weights)
         return 1
 
