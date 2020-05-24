@@ -234,7 +234,7 @@ class OpenstackExporter(_ExporterBase):
                         instance_hours = instance[HOURS_KEY]
                         if instance_hours > 0:
                             metric_amount = instance[instance_metric]
-                            total_usage += (instance_hours * metric_amount) * self.get_instance_weight(instance_metric, metric_amount)
+                            total_usage += (instance_hours * metric_amount) * self.get_instance_weight(instance_metric, metric_amount, instance["started_at"])
                     project_usages[project][metric] = total_usage
 
         return project_usages
