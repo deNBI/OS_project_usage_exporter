@@ -131,7 +131,7 @@ class OpenstackExporter(_ExporterBase):
         self.simple_vm_project = simple_vm_project
         self.simple_vm_tag = simple_vm_tag
         if vcpu_weights is not None and mb_weights is not None:
-            self.weights = {datetime.now().timestamp(): {"ram": mb_weights, "vcpu": vcpu_weights}}
+            self.weights = {0: {"memory_mb": mb_weights, "vcpus": vcpu_weights}}
         else:
             self.weights = None
         try:
