@@ -616,6 +616,7 @@ def main():
                     x['resource_set_timestamp']: {'memory_mb': {y['value']: y['weight'] for y in x['ram_weights']},
                                                   'vcpus': {y['value']: y['weight'] for y in x['vcpu_weights']}} for
                     x in weight_response.json()}
+                logging.info("Updated credits weights, new weights: " + str(current_weights))
                 exporter.update_weights(current_weights)
             except Exception as e:
                 logging.exception(
