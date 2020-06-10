@@ -1,0 +1,22 @@
+ame: Create Release Image
+on:
+  push:
+    tags:
+      - '*'
+jobs:
+  build_release:
+    runs-on: ubuntu-latest
+
+    steps:
+     - name: Get the version
+       id: get_version
+       run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+     - uses: actions/checkout@master
+     - name: Publish to Registry
+       uses: elgohr/Publish-Docker-Github-Action@master
+       with:
+        name: denbicloud/os_project_usage_exporter
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+        dockerfile: Dockerfile
+        tags: ${{ steps.get_version.outputs.VERSION }}
