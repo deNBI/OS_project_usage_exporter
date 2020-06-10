@@ -1,4 +1,4 @@
-ame: Create Release Image
+name: Create Release Image
 on:
   push:
     tags:
