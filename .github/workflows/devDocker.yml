@@ -1,0 +1,22 @@
+name: Publish Dev Docker
+on: 
+  push:
+    branches: 
+      - 'dev'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Workflow run cleanup action
+      uses: rokroskar/workflow-run-cleanup-action@v0.2.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - uses: actions/checkout@master
+    - name: Publish to Registry
+      uses: elgohr/Publish-Docker-Github-Action@master 
+      with:
+        name: denbicloud/os_project_usage_exporter
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+        dockerfile: Dockerfile
+        tags: "dev" 
