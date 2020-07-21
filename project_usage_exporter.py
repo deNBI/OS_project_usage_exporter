@@ -428,7 +428,7 @@ def main():
         "-i",
         "--update-interval",
         type=int,
-        default=int(getenv(update_interval_env_var, 300)),
+        default=int(getenv(update_interval_env_var, 30)),
         help=f"""Time to sleep between intervals, in case the calls cause to much load on
         your openstack instance. Defaults to the value of environment variable
         ${update_interval_env_var} or 300 (in seconds)""",

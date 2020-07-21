@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-
+from os import getenv
 import toml
 from munch import Munch
 import requests
@@ -8,10 +8,12 @@ from typing import (
     Union,
     cast,
 )
+import logging
 from enum import Enum
 import json
 
 hour_timedelta = timedelta(hours=1)
+dummy_file_env_var = "USAGE_EXPORTER_DUMMY_FILE"
 
 
 class DummyCloud:
@@ -20,15 +22,21 @@ class DummyCloud:
         self.dummy_file = dummy_file
         self.dummy_values = toml.loads(self.dummy_file.read())
         if start is not None:
-            script_start = start
+            script_start = start.replace(tzinfo=None)
         else:
             script_start = datetime.now()
         self.compute = Compute(self.dummy_values, script_start)
 
     def load_toml(self):
-        self.dummy_file.seek(0)
-        self.dummy_values = toml.loads(self.dummy_file.read())
-        self.compute.reload(self.dummy_values)
+        try:
+            with open(getenv(dummy_file_env_var)) as file:
+                file.seek(0)
+                self.dummy_values = toml.loads(file.read())
+                self.compute.reload(self.dummy_values)
+        except:
+            self.dummy_file.seek(0)
+            self.dummy_values = toml.loads(self.dummy_file.read())
+            self.compute.reload(self.dummy_values)
 
     def list_projects(self, domain_id=None):
         self.load_toml()
@@ -41,6 +49,7 @@ class DummyCloud:
                 project = Munch()
                 project.id = project_in_domain.get("project_id", "UNKNOWN_ID")
                 project.name = project_in_domain.get("project_name", "UNKNOWN_NAME")
+                project.domain_id = domain_content.get("domain_id", "UNKNOWN_DOMAIN_ID")
                 projects_return.append(project)
         return projects_return
 

@@ -12,12 +12,16 @@ Exported labels per project are:
 - `project_name`
 
 ## Requirements/Installation
+All dependencies are managed with a requirements.txt. Create a virtual environment with a tool of your choosing 
+(e.g. [*pyenv*](https://github.com/pyenv/pyenv) with [*pyenv-virtualenv*](https://github.com/pyenv/pyenv-virtualenv) or [*venv*](https://docs.python.org/3/library/venv.html)) and
+install with `pip install -r requirements.txt`.
 
-All production and development dependencies are managed via
+Deprecated:  
+~~All production and development dependencies are managed via
 [*pipenv*](https://pipenv.readthedocs.io). Therefore simply go via `pipenv install` or
 start directly with one of the modi listed below. You can activate the virtual
 environment via `pipenv shell` or simply prefix any command with `pipenv run` to have it
-run inside the corresponding environment.
+run inside the corresponding environment.~~
 
 A [docker image](https://hub.docker.com/r/tluettje/os_project_usage_exporter/) is
 available as well and all command line options do have corresponding environment
@@ -39,11 +43,20 @@ optional arguments:
   -h, --help            show this help message and exit
   -d DUMMY_DATA, --dummy-data DUMMY_DATA
                         Use dummy values instead of connecting to an openstack
-                        instance. Usage values are calculated base on the
-                        configured existence, take a look at the example file
-                        for an explanation resources/dummy_machines.toml. Can
-                        also be provided via environment variable
-                        $USAGE_EXPORTER_DUMMY_FILE (default: None)
+                        instance. Usage values are calculated based on the
+                        configured existence. Toml files can be updated on the
+                        fly as they are read every time a dummy-cloud function
+                        is called (functions of nested classes excluded). Take
+                        a look at the example file for an explanation
+                        resources/dummy_cc.toml. Can also be provided via
+                        environment variable $USAGE_EXPORTER_DUMMY_FILE
+                        (default: None)
+  -w DUMMY_WEIGHTS, --dummy-weights DUMMY_WEIGHTS
+                        Use dummy weight endpoint instead of connecting to the
+                        api. Take a look at the example file for an
+                        explanation resources/dummy_weights.toml. Can also be
+                        provided via environment variable
+                        $USAGE_EXPORTER_DUMMY_WEIGHTS_FILE (default: None)
   --domain [DOMAIN [DOMAIN ...]]
                         Only export usages of projects belonging to one of the
                         given domains. Separate them via comma if passing via
@@ -55,17 +68,52 @@ optional arguments:
                         identified by the given ID. Takes precedence over any
                         specified domain and default values. Can also be set
                         via $USAGE_EXPORTER_PROJECT_DOMAIN_ID (default: )
+  --vcpu-weights VCPU_WEIGHTS
+                        Use weights for different numbers of cpus in a vm.
+                        Value is given as the string representation of a
+                        dictionary with ints as keys and as values. a weight
+                        of 1 means no change. Above 1 its more expensive,
+                        under one it is less expensive. Can also be set via
+                        $USAGE_EXPORTER_VCPU_WEIGHTS (default: {})
+  --mb-weights MB_WEIGHTS
+                        Use weights for different numbers of mb (of ram) in a
+                        vm. Value is given as the string representation of a
+                        dictionary with ints as keys and as values. a weight
+                        of 1 means no change. Above 1 its more expensive,
+                        under one it is less expensive. Can also be set via
+                        $USAGE_EXPORTER_PROJECT_MB_WEIGHTS (default: {})
+  --simple-vm-id SIMPLE_VM_ID
+                        The ID of the Openstack project, that hosts the
+                        SimpleVm projects. Can also be set vis
+                        $USAGE_EXPORTER_SIMPLE_VM_PROJECT_ID (default: )
+  --simple-vm-tag SIMPLE_VM_TAG
+                        The metadata of the Openstack project, that hosts the
+                        SimpleVm projects. It is used to differentiate the
+                        simple vm projects, default: project_name Can also be
+                        set vis $USAGE_EXPORTER_SIMPLE_VM_PROJECT_TAG
+                        (default: project_name)
+  --weight-update-frequency WEIGHT_UPDATE_FREQUENCY
+                        The frequency of checking if there is a weight update.
+                        Is a multiple of the update interval length . Defaults
+                        to the value of environment variable
+                        $USAGE_EXPORTER_WEIGHT_UPDATE_FREQUENCY or 10
+                        (default: 10)
+  --weight-update-endpoint WEIGHT_UPDATE_ENDPOINT
+                        The endpoint url where the current weights can be
+                        updated . Defaults to the value of environment
+                        variable $USAGE_EXPORTER_WEIGHTS_UPDATE_ENDPOINT or
+                        will be left blank (default: )
   -s START, --start START
                         Beginning time of stats (YYYY-MM-DD). If set the value
                         of environment variable $USAGE_EXPORTER_START_DATE is
-                        used. Uses maya for parsing. (default: 2019-01-30
-                        15:29:32.363451)
+                        used. Uses maya for parsing. (default: 2020-07-21
+                        14:24:34.159480)
   -i UPDATE_INTERVAL, --update-interval UPDATE_INTERVAL
                         Time to sleep between intervals, in case the calls
                         cause to much load on your openstack instance.
                         Defaults to the value of environment variable
                         $USAGE_EXPORTER_UPDATE_INTERVAL or 300 (in seconds)
-                        (default: 300)
+                        (default: 30)
   -p PORT, --port PORT  Port to provide metrics on (default: 8080)
 
 GNU AGPLv3 @ tluettje
@@ -78,14 +126,14 @@ access to an OpenStack instance you can emulate running projects and machines wi
 simple `toml` files. A few profiles are available inside the `/resources` folder.
 
 ```shell
-pipenv run ./project_usage_exporter.py \
-            --dummy-data resources/dummy_machines.toml \
-            --update-interval 10 --domain
+./project_usage_exporter.py \
+ -d resources/dummy_cc.toml -w resources/dummy_weights.toml \
+ --vcpu-weights "{2:1}" --mb-weights "{1024:1}" --domain
 ```
 or
 ```
-docker run -e USAGE_EXPORTER_DUMMY_FILE=/code/resources/dummy_machines.toml \
-           -e USAGE_EXPORTER_UPDATE_INTERVAL=10 \
+docker run -e USAGE_EXPORTER_DUMMY_FILE=/code/resources/dummy_cc.toml \
+           -e USAGE_EXPORTER_DUMMY_WEIGHTS_FILE=/code/resources/dummy_weigths.toml \
            -e USAGE_EXPORTER_PROJECT_DOMAINS= \
            -p 8080:8080 tluettje/os_project_usage_exporter:v2
 ```
