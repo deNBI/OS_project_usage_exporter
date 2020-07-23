@@ -128,7 +128,7 @@ simple `toml` files. A few profiles are available inside the `/resources` folder
 ```shell
 ./project_usage_exporter.py \
  -d resources/dummy_cc.toml -w resources/dummy_weights.toml \
- --vcpu-weights "{2:1}" --mb-weights "{1024:1}" --domain
+ --vcpu-weights "{2:1}" --mb-weights "{1024:1}" --domain --simple-vm-id 123realsimplevm
 ```
 or
 ```
