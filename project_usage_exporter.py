@@ -4,7 +4,7 @@ Query project usages from an openstack instance and provide it in a prometheus c
 format.
 Alternatively develop in local mode and emulate machines and projects.
 """
-
+import json
 from argparse import (
     ArgumentParser,
     ArgumentDefaultsHelpFormatter,
@@ -16,28 +16,23 @@ from typing import (
     Optional,
     TextIO,
     Set,
-    Tuple,
     Dict,
-    List,
-    NamedTuple,
-    Union,
-    cast,
     Iterable,
 )
-from json import load
 from time import sleep
-from urllib import parse
 from datetime import datetime, timedelta
 from os import getenv
 from dataclasses import dataclass
 from hashlib import sha256 as sha256func
-from enum import Enum
+
+import toml
+
+from dummy_cloud import DummyCloud
 
 import openstack  # type: ignore
 import prometheus_client  # type: ignore
 import keystoneauth1  # type: ignore
 import maya
-import toml
 import ast
 import requests
 
@@ -81,13 +76,11 @@ project_domain_id_env_var = "USAGE_EXPORTER_PROJECT_DOMAIN_ID"
 
 dummy_file_env_var = "USAGE_EXPORTER_DUMMY_FILE"
 
-default_dummy_file = "resources/dummy_machines.toml"
+dummy_weights_file_env_var = "USAGE_EXPORTER_DUMMY_WEIGHTS_FILE"
 
-UsageTuple = NamedTuple("UsageTuple", [("vcpu_hours", float), ("mb_hours", float)])
+default_dummy_file = "resources/dummy_cc.toml"
 
-hour_timedelta = timedelta(hours=1)
-
-script_start = datetime.now()
+default_dummy_weights_file = "resources/dummy_weights.toml"
 
 
 def sha256(content: str) -> str:
@@ -119,7 +112,8 @@ class OpenstackExporter(_ExporterBase):
         vcpu_weights=None,
         mb_weights=None,
         simple_vm_project="",
-        simple_vm_tag=None
+        simple_vm_tag=None,
+        dummy_file: TextIO = None
     ) -> None:
         self.domains = set(domains) if domains else None
         self.domain_id = domain_id
@@ -130,25 +124,30 @@ class OpenstackExporter(_ExporterBase):
         self.mb_weights = mb_weights
         self.simple_vm_project = simple_vm_project
         self.simple_vm_tag = simple_vm_tag
+        self.dummy_file = dummy_file
         if vcpu_weights is not None and mb_weights is not None:
             self.weights = {0: {"memory_mb": mb_weights, "vcpus": vcpu_weights}}
         else:
             self.weights = None
-        try:
-            self.cloud = openstack.connect()
-        except keystoneauth1.exceptions.auth_plugins.MissingRequiredOptions:
-            logging.exception(
-                "Could not authenticate against OpenStack, Aborting! "
-                "See following traceback."
-            )
-            logging.info("Consider using the dummy mode for testing")
-            raise ValueError
+        if self.dummy_file is not None:
+            self.cloud = DummyCloud(self.dummy_file, self.stats_start)
+        else:
+            try:
+                self.cloud = openstack.connect()
+            except keystoneauth1.exceptions.auth_plugins.MissingRequiredOptions:
+                logging.exception(
+                    "Could not authenticate against OpenStack, Aborting! "
+                    "See following traceback."
+                )
+                logging.info("Consider using the dummy mode for testing")
+                raise ValueError
         self.update()
 
     def update(self) -> None:
         self.projects = self.collect_projects()
+        print(self.projects)
         self.usages = self.collect_usages(
-            start=self.stats_start.strftime("%Y-%m-%dT%H:%M:%S")
+            start=self.stats_start.strftime("%Y-%m-%dT%H:%M:%S.%f")
         )
         self.set_metrics()
 
@@ -191,15 +190,15 @@ class OpenstackExporter(_ExporterBase):
                     "Received following invalid json payload: %s", json_payload
                 )
                 continue
-            except BaseException:
-                logging.exception("Received following exception:")
+            except BaseException as e:
+                logging.exception(f"Received following exception:\n{e}")
                 continue
             if project.is_simple_vm_project:
                 if self.simple_vm_tag is None:
                     logging.error("The simple vm tag is not set, please set the simple vm metadata tag for simple vm tracking")
                 else:
                     json_payload_metadata = self.cloud.compute.get(  # type: ignore
-                        f"/servers/detail?all_tenants=true&project_id=" + project.id
+                        f"/servers/detail?all_tenants=false&project_id=" + project.id
                     ).json()
                     instance_id_to_project_dict = {}
                     for instance in json_payload_metadata['servers']:
@@ -236,7 +235,6 @@ class OpenstackExporter(_ExporterBase):
                             metric_amount = instance[instance_metric]
                             total_usage += (instance_hours * metric_amount) * self.get_instance_weight(instance_metric, metric_amount, instance["started_at"])
                     project_usages[project][metric] = total_usage
-
         return project_usages
 
     def get_instance_weight(self, metric_tag, metric_amount, started_date):
@@ -252,7 +250,11 @@ class OpenstackExporter(_ExporterBase):
             if associated_weights is not None:
                 metric_weights = associated_weights[metric_tag]
                 sorted_keys = sorted(metric_weights.keys())
-                max_key = max(sorted_keys)
+                try:
+                    max_key = max(sorted_keys)
+                except ValueError as e:
+                    logging.exception(e)
+                    return 1
                 for key in sorted_keys:
                     if metric_amount <= key or max_key == key:
                         return metric_weights[key]
@@ -290,7 +292,7 @@ class OpenstackExporter(_ExporterBase):
         return projects
 
 
-def add_project(id, name, domain_name, domain_id, simple_vm_id, projects):
+def add_project(id, name, domain_id, domain_name, simple_vm_id, projects):
     is_simple_vm_project = False
     if id == simple_vm_id:
         is_simple_vm_project = True
@@ -305,180 +307,19 @@ def add_project(id, name, domain_name, domain_id, simple_vm_id, projects):
     )
 
 
-class ExistenceInformation(Enum):
-    NO_EXISTENCE = 0
-    SINCE_SCRIPT_START = 1
-    SINCE_DATETIME = 2
-    BETWEEN_DATETIMES = 3
-
-
-@dataclass
-class DummyMachine:
-    """
-    Representing a dummy machine causing usage to monitor.
-    :param name: Currently not used outside but might be in future, therefore leave it
-    :param cpus: Number of cpus the dummy machine is using.
-    :param ram: Amount of RAM [GiB] the machine is using.
-    :param existence: Determines whether the machine is *up* and its usage so far. In case
-    of True the machine is considered booted up the instant this script is started. In
-    case of False it hasn't been booted ever (no actual use case).
-    In case of a single datetime the machine is considered *up* since that moment (for
-    simplicity the timezone information are ignored). In case of a list of two datetimes
-    the machine is considered *up* the time in between. The first one must be
-    older/smaller than the second one and both but relative to the moment the script
-    started both may lie in the future or past.
-    """
-
-    cpus: int = 4
-    ram: int = 8
-    existence: Union[bool, datetime, Tuple[datetime, datetime]] = True
-
-    def __post_init__(self) -> None:
-        if self.cpus <= 0 or self.ram <= 0:
-            raise ValueError("`cpu` and `ram` must be positive")
-        if isinstance(self.existence, (list, tuple)):
-            if self.existence[0] > self.existence[1]:  # type: ignore
-                raise ValueError(
-                    "First existence-tuple datetime must be older than second one"
-                )
-            # remove any timezone information
-            self.existence_information = ExistenceInformation.BETWEEN_DATETIMES
-        elif isinstance(self.existence, datetime):
-            self.existence_information = ExistenceInformation.SINCE_DATETIME
-        elif isinstance(self.existence, bool):
-            self.existence_information = (
-                ExistenceInformation.SINCE_SCRIPT_START
-                if self.existence
-                else ExistenceInformation.NO_EXISTENCE
-            )
-        else:
-            raise ValueError(
-                f"Invalid type for param `existence` (got {type(self.existence)}"
-            )
-
-    @property
-    def ram_mb(self) -> int:
-        return self.ram * 1024
-
-    def usage_value(self) -> UsageTuple:
-        """
-        Returns the total ram and cpu usage counted in hours of this machine, depending
-        on its `existence` configuration`
-        """
-        now = datetime.now()
-        if self.existence_information is ExistenceInformation.NO_EXISTENCE:
-            return UsageTuple(0, 0)
-        elif self.existence_information is ExistenceInformation.SINCE_SCRIPT_START:
-            hours_existence = (datetime.now() - script_start) / hour_timedelta
-            return UsageTuple(
-                self.cpus * hours_existence, self.ram_mb * hours_existence
-            )
-        elif self.existence_information is ExistenceInformation.SINCE_DATETIME:
-            # to satisfy `mypy` type checker
-            boot_datetime = cast(datetime, self.existence)
-            hours_existence = (
-                now - boot_datetime.replace(tzinfo=None)
-            ) / hour_timedelta
-            # do not report negative usage in case the machine is not *booted yet*
-            if hours_existence > 0:
-                return UsageTuple(
-                    self.cpus * hours_existence, self.ram_mb * hours_existence
-                )
-            else:
-                return UsageTuple(0, 0)
-        else:
-            # to satisfy `mypy` type checker
-            runtime_tuple = cast(Tuple[datetime, datetime], self.existence)
-            boot_datetime = cast(datetime, runtime_tuple[0].replace(tzinfo=None))
-            shutdown_datetime = cast(datetime, runtime_tuple[1].replace(tzinfo=None))
-            if boot_datetime > now:
-                # machine did not boot yet
-                return UsageTuple(0, 0)
-            elif shutdown_datetime < now:
-                # machine did run already and is considered down
-                hours_existence = (shutdown_datetime - boot_datetime) / hour_timedelta
-            else:
-                # machine booted in the past but is still existing
-                hours_existence = (now - boot_datetime) / hour_timedelta
-            return UsageTuple(
-                self.cpus * hours_existence, self.ram_mb * hours_existence
-            )
-
-
-class DummyExporter(_ExporterBase):
-    def __init__(
-        self,
-        dummy_values: TextIO,
-        domains: Iterable[str] = None,
-        domain_id: Optional[str] = None,
-    ) -> None:
-        self.dummy_values = toml.loads(dummy_values.read())
-        self.domains = set(domains) if domains else None
-        self.domain_id = domain_id
-        self.projects: List[DummyProject] = []
-        for project_name, project_content in self.dummy_values.items():
-            machines = [
-                DummyMachine(**machine) for machine in project_content["machines"]
-            ]
-            self.projects.append(
-                DummyProject(
-                    name=project_name,
-                    domain_name=project_content.get("domain", ""),
-                    machines=machines,
-                )
-            )
-        self.update()
-
-    def update(self) -> None:
-        for project in self.projects:
-            if self.domain_id and project.domain_id != self.domain_id:
-                logging.info(
-                    "Skipping exporting project %s since its domain id "
-                    "is not requested",
-                    project,
-                )
-                continue
-            if self.domains and project.domain_name not in self.domains:
-                logging.info(
-                    "Skipping exporting project %s since its domain "
-                    "is not requested",
-                    project,
-                )
-                continue
-            project_usages = [machine.usage_value() for machine in project.machines]
-            vcpu_hours = sum(usage.vcpu_hours for usage in project_usages)
-            mb_hours = sum(usage.mb_hours for usage in project_usages)
-            project_metrics["total_vcpus_usage"].labels(
-                project_id=project.id,
-                project_name=project.name,
-                domain_name=project.domain_name,
-                domain_id=project.domain_id,
-            ).set(vcpu_hours)
-            project_metrics["total_memory_mb_usage"].labels(
-                project_id=project.id,
-                project_name=project.name,
-                domain_name=project.domain_name,
-                domain_id=project.domain_id,
-            ).set(mb_hours)
-
-
-@dataclass
-class DummyProject:
-    name: str
-    machines: List[DummyMachine]
-    domain_name: str = ""
-
-    def __post_init__(self):
-        self.id = sha256(self.name)[-16:]
-        self.domain_id = sha256(self.domain_name)[-16:]
-
-
 def valid_date(s):
     try:
         return maya.when(s).datetime()
     except ValueError:
         msg = f"Unrecognized date: '{s}'."
         raise ArgumentTypeError(msg)
+
+
+def get_dummy_weights(file):
+    dummy_weights = toml.loads(file.read())
+    response = requests.Response()
+    response._content = json.dumps(dummy_weights["weights"], default=str).encode("utf-8")
+    return response
 
 
 def main():
@@ -492,9 +333,18 @@ def main():
         "--dummy-data",
         type=FileType(),
         help=f"""Use dummy values instead of connecting to an openstack instance. Usage
-        values are calculated base on the configured existence, take a look at the
-        example file for an explanation {default_dummy_file}. Can also be provided via
+        values are calculated based on the configured existence. Toml files can be updated on the fly as they are read 
+        every time a dummy-cloud function is called (functions of nested classes excluded).
+        Take a look at the example file for an explanation {default_dummy_file}. Can also be provided via
         environment variable ${dummy_file_env_var}""",
+    )
+    parser.add_argument(
+        "-w",
+        "--dummy-weights",
+        type=FileType(),
+        help=f"""Use dummy weight endpoint instead of connecting to the api. Take a look at the
+        example file for an explanation {default_dummy_weights_file}. Can also be provided via
+        environment variable ${dummy_weights_file_env_var}""",
     )
     parser.add_argument(
         "--domain",
@@ -526,7 +376,7 @@ def main():
         help=f"""Use weights for different numbers of cpus in a vm. Value is given as
          the string representation of a dictionary with ints as keys and as values.
          a weight of 1 means no change. Above 1 its more expensive, under one it is less 
-         expensive. Not available with dummy mode. Can also be set via ${vcpu_weights_env_var}""",
+         expensive. Can also be set via ${vcpu_weights_env_var}""",
     )
     parser.add_argument(
         "--mb-weights",
@@ -535,7 +385,7 @@ def main():
         help=f"""Use weights for different numbers of mb (of ram) in a vm. Value is given as
          the string representation of a dictionary with ints as keys and as values.
          a weight of 1 means no change. Above 1 its more expensive, under one it is less 
-         expensive. Not available with dummy mode. Can also be set via ${project_mb_weights_env_var}""",
+         expensive. Can also be set via ${project_mb_weights_env_var}""",
     )
     parser.add_argument(
         "--simple-vm-id",
@@ -578,7 +428,7 @@ def main():
         "-i",
         "--update-interval",
         type=int,
-        default=int(getenv(update_interval_env_var, 300)),
+        default=int(getenv(update_interval_env_var, 30)),
         help=f"""Time to sleep between intervals, in case the calls cause to much load on
         your openstack instance. Defaults to the value of environment variable
         ${update_interval_env_var} or 300 (in seconds)""",
@@ -589,13 +439,27 @@ def main():
     args = parser.parse_args()
     if args.dummy_data:
         logging.info("Using dummy export with data from %s", args.dummy_data.name)
-        exporter = DummyExporter(args.dummy_data, args.domain, args.domain_id)
+        try:
+            exporter = OpenstackExporter(
+                domains=args.domain, stats_start=args.start, domain_id=args.domain_id,
+                vcpu_weights=ast.literal_eval(args.vcpu_weights), mb_weights=ast.literal_eval(args.mb_weights),
+                simple_vm_project=args.simple_vm_id, simple_vm_tag=args.simple_vm_tag, dummy_file=args.dummy_data
+            )
+        except ValueError as e:
+            return 1
     elif getenv(dummy_file_env_var):
         logging.info("Using dummy export with data from %s", getenv(dummy_file_env_var))
         # if the default dummy data have been used we need to open them, argparse
         # hasn't done this for us since the default value has not been a string
-        with open(getenv(dummy_file_env_var)) as file:
-            exporter = DummyExporter(file, args.domain, args.domain_id)
+        try:
+            with open(getenv(dummy_file_env_var)) as file:
+                exporter = OpenstackExporter(
+                    domains=args.domain, stats_start=args.start, domain_id=args.domain_id,
+                    vcpu_weights=ast.literal_eval(args.vcpu_weights), mb_weights=ast.literal_eval(args.mb_weights),
+                    simple_vm_project=args.simple_vm_id, simple_vm_tag=args.simple_vm_tag, dummy_file=file
+                )
+        except ValueError as e:
+            return 1
     else:
         try:
             logging.info("Using regular openstack exporter")
@@ -609,10 +473,18 @@ def main():
     logging.info(f"Beginning to serve metrics on port {args.port}")
     prometheus_client.start_http_server(args.port)
     laps = args.weight_update_frequency
+    if args.dummy_weights or getenv(dummy_weights_file_env_var):
+        args.weight_update_endpoint = "dummy-endpoint"
     while True:
         if laps >= args.weight_update_frequency and args.weight_update_endpoint != "":
             try:
-                weight_response = requests.get(args.weight_update_endpoint)
+                if args.dummy_weights:
+                    weight_response = get_dummy_weights(args.dummy_weights)
+                elif getenv(dummy_weights_file_env_var):
+                    with open(getenv(dummy_weights_file_env_var)) as file:
+                        weight_response = get_dummy_weights(file)
+                else:
+                    weight_response = requests.get(args.weight_update_endpoint)
                 current_weights = {
                     x['resource_set_timestamp']: {'memory_mb': {y['value']: y['weight'] for y in x['memory_mb']},
                                                   'vcpus': {y['value']: y['weight'] for y in x['vcpus']}} for
