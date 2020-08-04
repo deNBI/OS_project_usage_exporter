@@ -1,0 +1,86 @@
+# See github.com/toml-lang/toml for a configuration guide
+# For more information about toml files beside github see here https://learnxinyminutes.com/docs/toml/
+#
+# Here: default domain for OS projects without vm metadata.
+[default] # domain name
+domain_id = "default" # domain id
+
+# creates a projects: [{project_name:somename, project_id:someid, machines=[]}] entry with data below
+# use this format if none of the values inside a machine in machines is a dictionary
+[[default.projects]]
+project_name="MyOSP"
+project_id = '123MyOSP'
+machines = [
+    # when existence = true, the machine is treated as if it was active since start-string (if start-string provided)
+    # or time of script-start (if start-string not provided)
+    {ram = 8, cpus = 2, existence = true, instance_id = "1"},
+    # when existence = false, the machines is treated as if it was never active
+    {ram = 8, cpus = 4, existence = false, instance_id = "2"},
+    # when existence = datetime, the machines is treated as if it was active since start-string (if start-string
+    # provided and start-string > datetime) or since datetime (if start_string not provided or start_string < datetime)
+    {ram = 8, cpus = 2, existence = 2020-07-15T14:30:00, instance_id = "3"},
+    # when existence = [datetime_start, datetime_stop], the machines is treated as if it was active since start-string (if start-string
+    # provided and start-string > datetime_start) or since datetime (if start_string not provided or start_string < datetime_start)
+    # until datetime_stop
+    {ram = 8, cpus = 4, existence = [2020-07-15T14:30:00, 2020-07-16T20:40:00], instance_id = "4"},
+]
+
+# creates another project-json in projects array with data below
+# { ..., projects = [{project_name=...}, {project_name="HerOSP", ...}] }
+[[default.projects]]
+project_name="HerOSP"
+project_id = '123HerOSP'
+machines = [
+    {ram = 8, cpus = 2, existence = true, instance_id = "5"},
+    {ram = 8, cpus = 4, existence = true, instance_id = "6"},
+]
+
+# Here: elixir domain for simplevm pool-projects with vm metadata.
+[elixir]
+domain_id="123elixirDomain"
+
+[[elixir.projects]]
+project_name="portal-pool-dev"
+project_id="123devsimplevm"
+
+    # creates a {..., machines = [{ram=,cpus=,...}, {ram=,cpus=,...}], ...} entry with data below
+    # you have to use this format if a value inside a machine in machines is a dictionary (e.g. the metadata entry)
+    # otherwise you will encounter an inline error
+    [[elixir.projects.machines]]
+    ram = 8
+    cpus = 2
+    existence = true
+    metadata = {project_name = 'MySVM', project_id = ''}
+    instance_id = "7"
+
+    [[elixir.projects.machines]]
+    ram = 8
+    cpus = 4
+    existence = true
+    metadata = {project_name = 'MySVM', project_id = ''}
+    instance_id = "8"
+
+[[elixir.projects]]
+project_name="portal-pool"
+project_id="123realsimplevm"
+
+    [[elixir.projects.machines]]
+    ram = 8
+    cpus = 4
+    existence = true
+    metadata = {project_name = 'HerSVM', project_id = ''}
+    instance_id = "9"
+
+    [[elixir.projects.machines]]
+    ram = 8
+    cpus = 4
+    existence = [2020-07-15T14:30:00, 2020-07-16T20:40:00]
+    metadata = {project_name = 'HisSVM', project_id = ''}
+    instance_id = "10"
+
+    [[elixir.projects.machines]]
+    ram = 80
+    cpus = 40
+    existence = 2020-07-15T14:30:00
+    metadata = {project_name = 'HisSVM', project_id = ''}
+    instance_id = "11"

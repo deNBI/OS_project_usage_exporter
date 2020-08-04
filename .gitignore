@@ -1,3 +1,5 @@
+.idea
+
 *openrc*
 # Swap
 [._]*.s[a-v][a-z]
@@ -96,8 +98,6 @@ profile_default/
 ipython_config.py
 
 # pyenv
-.python-version
-
 # celery beat schedule file
 celerybeat-schedule
 
