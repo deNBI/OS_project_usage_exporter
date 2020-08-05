@@ -1,0 +1,19 @@
+version: 1
+update_configs: 
+	- package_manager: ""	
+	  directory: "/"
+	  update_schedule: "weekly"
+	  targe_branch: "dev"
+	  default_reviewers:
+		- "dweinholz"
+		- "eKatchko"
+		- "vktrrdk"
+	- package_manager: ""
+	  directory: "/"
+	  update_schedule: "weekly"
+	  target_branch: "dev"
+	  default_reviewers:
+		- "dweinholz"
+		- "eKatchko"
+		- "vktrrdk"
+
