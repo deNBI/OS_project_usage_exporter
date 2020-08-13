@@ -141,11 +141,9 @@ class OpenstackExporter(_ExporterBase):
                 )
                 logging.info("Consider using the dummy mode for testing")
                 raise ValueError
-        self.update()
 
     def update(self) -> None:
         self.projects = self.collect_projects()
-        print(self.projects)
         self.usages = self.collect_usages(
             start=self.stats_start.strftime("%Y-%m-%dT%H:%M:%S.%f")
         )
@@ -249,12 +247,10 @@ class OpenstackExporter(_ExporterBase):
                     break
             if associated_weights is not None:
                 metric_weights = associated_weights[metric_tag]
-                sorted_keys = sorted(metric_weights.keys())
-                try:
-                    max_key = max(sorted_keys)
-                except ValueError as e:
-                    logging.exception(e)
+                if len(metric_weights) == 0:
                     return 1
+                sorted_keys = sorted(metric_weights.keys())
+                max_key = max(sorted_keys)
                 for key in sorted_keys:
                     if metric_amount <= key or max_key == key:
                         return metric_weights[key]
