@@ -118,8 +118,7 @@ optional arguments:
   -s START, --start START
                         Beginning time of stats (YYYY-MM-DD). If set the value
                         of environment variable $USAGE_EXPORTER_START_DATE is
-                        used. Uses maya for parsing. (default: 2020-08-20
-                        23:01:54.732675)
+                        used. Uses maya for parsing. (default: datetime.today())
   -i UPDATE_INTERVAL, --update-interval UPDATE_INTERVAL
                         Time to sleep between intervals, in case the calls
                         cause to much load on your openstack instance.
