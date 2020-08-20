@@ -421,8 +421,9 @@ def main():
         "--start-date-endpoint",
         type=str,
         default=getenv(start_date_endpoint_env_var, None),
-        help=f"""The endpoint url where the start date can be updated
-        . Defaults to the value of environment variable ${start_date_endpoint_env_var} or will be left blank""",
+        help=f"""The endpoint url where the start date can be requested.
+        If defined, requested date takes precedence over all other start date arguments.
+        Defaults to the value of environment variable ${start_date_endpoint_env_var} or will be left blank""",
     )
     parser.add_argument(
         "-s",

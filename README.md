@@ -111,8 +111,10 @@ optional arguments:
                         variable $USAGE_EXPORTER_WEIGHTS_UPDATE_ENDPOINT or
                         will be left blank (default: )
   --start-date-endpoint START_DATE_ENDPOINT
-                        The endpoint url where the start date can be updated .
-                        Defaults to the value of environment variable
+                        The endpoint url where the start date can be
+                        requested. If defined, requested date takes precedence
+                        over all other start date arguments. Defaults to the
+                        value of environment variable
                         $USAGE_EXPORTER_START_DATE_ENDPOINT or will be left
                         blank (default: None)
   -s START, --start START
