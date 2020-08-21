@@ -30,10 +30,17 @@ variables.
 ## Usage
 
 ```
-usage: project_usage_exporter.py [-h] [-d DUMMY_DATA]
+usage: project_usage_exporter.py [-h] [-d DUMMY_DATA] [-w DUMMY_WEIGHTS]
                                  [--domain [DOMAIN [DOMAIN ...]]]
-                                 [--domain-id DOMAIN_ID] [-s START]
-                                 [-i UPDATE_INTERVAL] [-p PORT]
+                                 [--domain-id DOMAIN_ID]
+                                 [--vcpu-weights VCPU_WEIGHTS]
+                                 [--mb-weights MB_WEIGHTS]
+                                 [--simple-vm-id SIMPLE_VM_ID]
+                                 [--simple-vm-tag SIMPLE_VM_TAG]
+                                 [--weight-update-frequency WEIGHT_UPDATE_FREQUENCY]
+                                 [--weight-update-endpoint WEIGHT_UPDATE_ENDPOINT]
+                                 [--start-date-endpoint START_DATE_ENDPOINT]
+                                 [-s START] [-i UPDATE_INTERVAL] [-p PORT]
 
 Query project usages from an openstack instance and provide it in a prometheus
 compatible format. Alternatively develop in local mode and emulate machines
@@ -103,11 +110,17 @@ optional arguments:
                         updated . Defaults to the value of environment
                         variable $USAGE_EXPORTER_WEIGHTS_UPDATE_ENDPOINT or
                         will be left blank (default: )
+  --start-date-endpoint START_DATE_ENDPOINT
+                        The endpoint url where the start date can be
+                        requested. If defined, requested date takes precedence
+                        over all other start date arguments. Defaults to the
+                        value of environment variable
+                        $USAGE_EXPORTER_START_DATE_ENDPOINT or will be left
+                        blank (default: None)
   -s START, --start START
                         Beginning time of stats (YYYY-MM-DD). If set the value
                         of environment variable $USAGE_EXPORTER_START_DATE is
-                        used. Uses maya for parsing. (default: 2020-07-21
-                        14:24:34.159480)
+                        used. Uses maya for parsing. (default: datetime.today())
   -i UPDATE_INTERVAL, --update-interval UPDATE_INTERVAL
                         Time to sleep between intervals, in case the calls
                         cause to much load on your openstack instance.
