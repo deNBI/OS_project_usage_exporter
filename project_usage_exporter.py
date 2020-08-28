@@ -68,6 +68,7 @@ simple_vm_project_name_tag_env_var = "USAGE_EXPORTER_SIMPLE_VM_PROJECT_TAG"
 vcpu_weights_env_var = "USAGE_EXPORTER_VCPU_WEIGHTS"
 project_mb_weights_env_var = "USAGE_EXPORTER_PROJECT_MB_WEIGHTS"
 verbosity_env_var = "USAGE_EXPORTER_VERBOSE_MODE"
+start_date_endpoint_env_var = "USAGE_EXPORTER_START_DATE_ENDPOINT"
 
 # name of the domain whose projects to monitor
 project_domain_env_var = "USAGE_EXPORTER_PROJECT_DOMAINS"
@@ -423,6 +424,14 @@ def main():
         . Defaults to the value of environment variable ${weights_update_endpoint_env_var} or will be left blank""",
     )
     parser.add_argument(
+        "--start-date-endpoint",
+        type=str,
+        default=getenv(start_date_endpoint_env_var, None),
+        help=f"""The endpoint url where the start date can be requested.
+        If defined, requested date takes precedence over all other start date arguments.
+        Defaults to the value of environment variable ${start_date_endpoint_env_var} or will be left blank""",
+    )
+    parser.add_argument(
         "-s",
         "--start",
         type=valid_date,
@@ -461,6 +470,15 @@ def main():
     if args.verbose:
         logger.setLevel(logging.DEBUG)
         logger.debug("Debug mode activated.")
+    if args.start_date_endpoint:
+        try:
+            start_date_response = requests.get(args.start_date_endpoint)
+            start_date_response = start_date_response.json()
+            args.start = maya.when(start_date_response[0]["start_date"]).datetime()
+        except Exception as e:
+            logger.exception(f"Exception when getting start date from endpoint. Exception message: {e}. "
+                              f"Traceback following:\n")
+            return 1
     if args.dummy_data:
         logger.info("Using dummy export with data from %s", args.dummy_data.name)
         try:
