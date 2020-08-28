@@ -16,14 +16,7 @@ All dependencies are managed with a requirements.txt. Create a virtual environme
 (e.g. [*pyenv*](https://github.com/pyenv/pyenv) with [*pyenv-virtualenv*](https://github.com/pyenv/pyenv-virtualenv) or [*venv*](https://docs.python.org/3/library/venv.html)) and
 install with `pip install -r requirements.txt`.
 
-Deprecated:  
-~~All production and development dependencies are managed via
-[*pipenv*](https://pipenv.readthedocs.io). Therefore simply go via `pipenv install` or
-start directly with one of the modi listed below. You can activate the virtual
-environment via `pipenv shell` or simply prefix any command with `pipenv run` to have it
-run inside the corresponding environment.~~
-
-A [docker image](https://hub.docker.com/r/tluettje/os_project_usage_exporter/) is
+A [docker image](https://hub.docker.com/r/denbicloud/os_project_usage_exporter/) is
 available as well and all command line options do have corresponding environment
 variables.
 
@@ -148,11 +141,14 @@ or
 docker run -e USAGE_EXPORTER_DUMMY_FILE=/code/resources/dummy_cc.toml \
            -e USAGE_EXPORTER_DUMMY_WEIGHTS_FILE=/code/resources/dummy_weigths.toml \
            -e USAGE_EXPORTER_PROJECT_DOMAINS= \
-           -p 8080:8080 tluettje/os_project_usage_exporter:v2
+           -p 8080:8080 denbicloud/os_project_usage_exporter:latest
 ```
 This will emulate a few projects with machines without any domain restrictions. The
 `resources` folder is also available inside the docker container at `/code/resources`.
 
+**Note**: If you want to fetch mb and vcpu weights from an active endpoint, you need to omit the 
+`-w DUMMY_WEIGHTS, --dummy-weights DUMMY_WEIGHTS` argument or respectively the `USAGE_EXPORTER_DUMMY_WEIGHTS_FILE`
+environment as providing a dummy weights file deactivates fetching weights from and active endpoint.
 ## Production Mode
 
 Simply source your `admin-openrc.sh` before starting the exporter. Depending on the size
@@ -164,5 +160,5 @@ any lines other than `key=value` pairs. Surrounding quotes will be considered pa
 the values therefore remove them as well.
 
 ```
-docker run --env-file openrc -p 8080:8080 tluettje/os_project_usage_exporter:v2
+docker run --env-file openrc -p 8080:8080 denbicloud/os_project_usage_exporter:latest
 ```
