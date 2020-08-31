@@ -5,6 +5,7 @@ format.
 Alternatively develop in local mode and emulate machines and projects.
 """
 import json
+from distutils.util import strtobool
 from argparse import (
     ArgumentParser,
     ArgumentDefaultsHelpFormatter,
@@ -39,7 +40,7 @@ import requests
 # enable logging for now
 format = "%(asctime)s - %(levelname)s [%(name)s] %(threadName)s %(message)s"
 logging.basicConfig(level=logging.INFO, format=format)
-
+logger = logging.getLogger()
 
 project_labels = ["project_id", "project_name", "domain_name", "domain_id"]
 project_metrics = {
@@ -66,6 +67,8 @@ simple_vm_project_id_env_var = "USAGE_EXPORTER_SIMPLE_VM_PROJECT_ID"
 simple_vm_project_name_tag_env_var = "USAGE_EXPORTER_SIMPLE_VM_PROJECT_TAG"
 vcpu_weights_env_var = "USAGE_EXPORTER_VCPU_WEIGHTS"
 project_mb_weights_env_var = "USAGE_EXPORTER_PROJECT_MB_WEIGHTS"
+verbosity_env_var = "USAGE_EXPORTER_VERBOSE_MODE"
+start_date_endpoint_env_var = "USAGE_EXPORTER_START_DATE_ENDPOINT"
 
 # name of the domain whose projects to monitor
 project_domain_env_var = "USAGE_EXPORTER_PROJECT_DOMAINS"
@@ -135,23 +138,28 @@ class OpenstackExporter(_ExporterBase):
             try:
                 self.cloud = openstack.connect()
             except keystoneauth1.exceptions.auth_plugins.MissingRequiredOptions:
-                logging.exception(
+                logger.exception(
                     "Could not authenticate against OpenStack, Aborting! "
                     "See following traceback."
                 )
-                logging.info("Consider using the dummy mode for testing")
+                logger.info("Consider using the dummy mode for testing")
                 raise ValueError
-        self.update()
 
     def update(self) -> None:
         self.projects = self.collect_projects()
-        print(self.projects)
+        logger.debug(f"Collected projects: {self.projects}")
         self.usages = self.collect_usages(
             start=self.stats_start.strftime("%Y-%m-%dT%H:%M:%S.%f")
         )
+        logger.debug(f"Collected usages: {self.usages}")
         self.set_metrics()
 
     def update_weights(self, new_weights) -> None:
+        if self.weights != new_weights:
+            logger.info(f"Updating weights: Old: {self.weights}. New: {new_weights}")
+        if len(new_weights) == 0:
+            logger.warning(f"Updated weights are empty, which should not happen. "
+                           f"Please check configuration or activate debug mode.")
         self.weights = new_weights
 
     def set_metrics(self) -> None:
@@ -179,23 +187,23 @@ class OpenstackExporter(_ExporterBase):
                 ).json()
                 project_usage = json_payload["tenant_usage"]  # type: ignore
                 if not project_usage:
-                    logging.info(
+                    logger.info(
                         "Project %s has no existing projects (in the requested date "
                         "range), skipping",
                         project,
                     )
                     continue
             except KeyError:
-                logging.error(
+                logger.error(
                     "Received following invalid json payload: %s", json_payload
                 )
                 continue
             except BaseException as e:
-                logging.exception(f"Received following exception:\n{e}")
+                logger.exception(f"Received following exception:\n{e}")
                 continue
             if project.is_simple_vm_project:
                 if self.simple_vm_tag is None:
-                    logging.error("The simple vm tag is not set, please set the simple vm metadata tag for simple vm tracking")
+                    logger.error("The simple vm tag is not set, please set the simple vm metadata tag for simple vm tracking")
                 else:
                     json_payload_metadata = self.cloud.compute.get(  # type: ignore
                         f"/servers/detail?all_tenants=false&project_id=" + project.id
@@ -239,7 +247,7 @@ class OpenstackExporter(_ExporterBase):
 
     def get_instance_weight(self, metric_tag, metric_amount, started_date):
         instance_started_timestamp = datetime.strptime(started_date, "%Y-%m-%dT%H:%M:%S.%f").timestamp()
-        if self.weights is not None:
+        if self.weights is not None and len(self.weights) != 0:
             sorted_timestamps = sorted(self.weights.keys())
             max_timestamp = max(sorted_timestamps)
             associated_weights = None
@@ -249,24 +257,23 @@ class OpenstackExporter(_ExporterBase):
                     break
             if associated_weights is not None:
                 metric_weights = associated_weights[metric_tag]
-                sorted_keys = sorted(metric_weights.keys())
-                try:
-                    max_key = max(sorted_keys)
-                except ValueError as e:
-                    logging.exception(e)
+                if len(metric_weights) == 0:
+                    logger.debug(f"No weights for {metric_tag}. Using 1.")
                     return 1
+                sorted_keys = sorted(metric_weights.keys())
+                max_key = max(sorted_keys)
                 for key in sorted_keys:
                     if metric_amount <= key or max_key == key:
                         return metric_weights[key]
-                logging.info(
-                    "WARNING: The weight was set to 1 this should not happen though. Metric: %s, Weights: %s, Amount: %s"
+                logger.debug(
+                    "Warning: The weight was set to 1 this should not happen though. Metric: %s, Weights: %s, Amount: %s"
                     "", metric_tag, str(metric_weights), str(metric_amount))
                 return 1
             else:
-                logging.info("warning could not determine metric: %s for timestamp %s", self.weights,
+                logger.debug("Warning: could not determine metric: %s for timestamp %s", self.weights,
                              instance_started_timestamp)
                 return 1
-        logging.info("Warning: metric is not set: %s", self.weights)
+        logger.debug("Warning: no weights set!")
         return 1
 
     def collect_projects(self) -> Set[OpenstackProject]:
@@ -278,7 +285,7 @@ class OpenstackExporter(_ExporterBase):
             for domain_name in self.domains:
                 domain = self.cloud.get_domain(name_or_id=domain_name)
                 if not domain:
-                    logging.info(
+                    logger.info(
                         "Could not detect any domain with name %s. Skipping",
                         domain_name,
                     )
@@ -417,6 +424,14 @@ def main():
         . Defaults to the value of environment variable ${weights_update_endpoint_env_var} or will be left blank""",
     )
     parser.add_argument(
+        "--start-date-endpoint",
+        type=str,
+        default=getenv(start_date_endpoint_env_var, None),
+        help=f"""The endpoint url where the start date can be requested.
+        If defined, requested date takes precedence over all other start date arguments.
+        Defaults to the value of environment variable ${start_date_endpoint_env_var} or will be left blank""",
+    )
+    parser.add_argument(
         "-s",
         "--start",
         type=valid_date,
@@ -436,9 +451,36 @@ def main():
     parser.add_argument(
         "-p", "--port", type=int, default=8080, help="Port to provide metrics on"
     )
+    try:
+        parser.add_argument(
+            "-v", "--verbose",
+            action="store_true",
+            default=strtobool(getenv(verbosity_env_var, "False")),
+            help="Activate logging debug level"
+        )
+    except:
+        logger.error(f"Could not convert {verbosity_env_var} to boolean.")
+        parser.add_argument(
+            "-v", "--verbose",
+            action="store_true",
+            default=False,
+            help="Activate logging debug level"
+        )
     args = parser.parse_args()
+    if args.verbose:
+        logger.setLevel(logging.DEBUG)
+        logger.debug("Debug mode activated.")
+    if args.start_date_endpoint:
+        try:
+            start_date_response = requests.get(args.start_date_endpoint)
+            start_date_response = start_date_response.json()
+            args.start = maya.when(start_date_response[0]["start_date"]).datetime()
+        except Exception as e:
+            logger.exception(f"Exception when getting start date from endpoint. Exception message: {e}. "
+                              f"Traceback following:\n")
+            return 1
     if args.dummy_data:
-        logging.info("Using dummy export with data from %s", args.dummy_data.name)
+        logger.info("Using dummy export with data from %s", args.dummy_data.name)
         try:
             exporter = OpenstackExporter(
                 domains=args.domain, stats_start=args.start, domain_id=args.domain_id,
@@ -448,7 +490,7 @@ def main():
         except ValueError as e:
             return 1
     elif getenv(dummy_file_env_var):
-        logging.info("Using dummy export with data from %s", getenv(dummy_file_env_var))
+        logger.info("Using dummy export with data from %s", getenv(dummy_file_env_var))
         # if the default dummy data have been used we need to open them, argparse
         # hasn't done this for us since the default value has not been a string
         try:
@@ -462,7 +504,7 @@ def main():
             return 1
     else:
         try:
-            logging.info("Using regular openstack exporter")
+            logger.info("Using regular openstack exporter")
             exporter = OpenstackExporter(
                 domains=args.domain, stats_start=args.start, domain_id=args.domain_id,
                 vcpu_weights=ast.literal_eval(args.vcpu_weights), mb_weights=ast.literal_eval(args.mb_weights),
@@ -470,7 +512,7 @@ def main():
             )
         except ValueError as e:
             return 1
-    logging.info(f"Beginning to serve metrics on port {args.port}")
+    logger.info(f"Beginning to serve metrics on port {args.port}")
     prometheus_client.start_http_server(args.port)
     laps = args.weight_update_frequency
     if args.dummy_weights or getenv(dummy_weights_file_env_var):
@@ -489,10 +531,10 @@ def main():
                     x['resource_set_timestamp']: {'memory_mb': {y['value']: y['weight'] for y in x['memory_mb']},
                                                   'vcpus': {y['value']: y['weight'] for y in x['vcpus']}} for
                     x in weight_response.json()}
-                logging.debug("Updated credits weights, new weights: " + str(current_weights))
+                logger.debug("Updated credits weights, new weights: " + str(current_weights))
                 exporter.update_weights(current_weights)
             except Exception as e:
-                logging.exception(
+                logger.exception(
                     f"Received exception {e} while trying to update the credit weights, check if credit endpoint {args.weight_update_endpoint}"
                     f" is accessible or contact the denbi team to check if the weights are set correctly. Traceback following."
                 )
@@ -503,10 +545,10 @@ def main():
             sleep(args.update_interval)
             exporter.update()
         except KeyboardInterrupt:
-            logging.info("Received Ctrl-c, exiting.")
+            logger.info("Received Ctrl-c, exiting.")
             return 0
         except Exception as e:
-            logging.exception(
+            logger.exception(
                 f"Received unexpected exception {e}. Traceback following."
             )
             return 1

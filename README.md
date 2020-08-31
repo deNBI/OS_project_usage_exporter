@@ -16,24 +16,24 @@ All dependencies are managed with a requirements.txt. Create a virtual environme
 (e.g. [*pyenv*](https://github.com/pyenv/pyenv) with [*pyenv-virtualenv*](https://github.com/pyenv/pyenv-virtualenv) or [*venv*](https://docs.python.org/3/library/venv.html)) and
 install with `pip install -r requirements.txt`.
 
-Deprecated:  
-~~All production and development dependencies are managed via
-[*pipenv*](https://pipenv.readthedocs.io). Therefore simply go via `pipenv install` or
-start directly with one of the modi listed below. You can activate the virtual
-environment via `pipenv shell` or simply prefix any command with `pipenv run` to have it
-run inside the corresponding environment.~~
-
-A [docker image](https://hub.docker.com/r/tluettje/os_project_usage_exporter/) is
+A [docker image](https://hub.docker.com/r/denbicloud/os_project_usage_exporter/) is
 available as well and all command line options do have corresponding environment
 variables.
 
 ## Usage
 
 ```
-usage: project_usage_exporter.py [-h] [-d DUMMY_DATA]
+usage: project_usage_exporter.py [-h] [-d DUMMY_DATA] [-w DUMMY_WEIGHTS]
                                  [--domain [DOMAIN [DOMAIN ...]]]
-                                 [--domain-id DOMAIN_ID] [-s START]
-                                 [-i UPDATE_INTERVAL] [-p PORT]
+                                 [--domain-id DOMAIN_ID]
+                                 [--vcpu-weights VCPU_WEIGHTS]
+                                 [--mb-weights MB_WEIGHTS]
+                                 [--simple-vm-id SIMPLE_VM_ID]
+                                 [--simple-vm-tag SIMPLE_VM_TAG]
+                                 [--weight-update-frequency WEIGHT_UPDATE_FREQUENCY]
+                                 [--weight-update-endpoint WEIGHT_UPDATE_ENDPOINT]
+                                 [--start-date-endpoint START_DATE_ENDPOINT]
+                                 [-s START] [-i UPDATE_INTERVAL] [-p PORT]
 
 Query project usages from an openstack instance and provide it in a prometheus
 compatible format. Alternatively develop in local mode and emulate machines
@@ -103,11 +103,17 @@ optional arguments:
                         updated . Defaults to the value of environment
                         variable $USAGE_EXPORTER_WEIGHTS_UPDATE_ENDPOINT or
                         will be left blank (default: )
+  --start-date-endpoint START_DATE_ENDPOINT
+                        The endpoint url where the start date can be
+                        requested. If defined, requested date takes precedence
+                        over all other start date arguments. Defaults to the
+                        value of environment variable
+                        $USAGE_EXPORTER_START_DATE_ENDPOINT or will be left
+                        blank (default: None)
   -s START, --start START
                         Beginning time of stats (YYYY-MM-DD). If set the value
                         of environment variable $USAGE_EXPORTER_START_DATE is
-                        used. Uses maya for parsing. (default: 2020-07-21
-                        14:24:34.159480)
+                        used. Uses maya for parsing. (default: datetime.today())
   -i UPDATE_INTERVAL, --update-interval UPDATE_INTERVAL
                         Time to sleep between intervals, in case the calls
                         cause to much load on your openstack instance.
@@ -135,11 +141,14 @@ or
 docker run -e USAGE_EXPORTER_DUMMY_FILE=/code/resources/dummy_cc.toml \
            -e USAGE_EXPORTER_DUMMY_WEIGHTS_FILE=/code/resources/dummy_weigths.toml \
            -e USAGE_EXPORTER_PROJECT_DOMAINS= \
-           -p 8080:8080 tluettje/os_project_usage_exporter:v2
+           -p 8080:8080 denbicloud/os_project_usage_exporter:latest
 ```
 This will emulate a few projects with machines without any domain restrictions. The
 `resources` folder is also available inside the docker container at `/code/resources`.
 
+**Note**: If you want to fetch mb and vcpu weights from an active endpoint, you need to omit the 
+`-w DUMMY_WEIGHTS, --dummy-weights DUMMY_WEIGHTS` argument or respectively the `USAGE_EXPORTER_DUMMY_WEIGHTS_FILE`
+environment as providing a dummy weights file deactivates fetching weights from and active endpoint.
 ## Production Mode
 
 Simply source your `admin-openrc.sh` before starting the exporter. Depending on the size
@@ -151,5 +160,5 @@ any lines other than `key=value` pairs. Surrounding quotes will be considered pa
 the values therefore remove them as well.
 
 ```
-docker run --env-file openrc -p 8080:8080 tluettje/os_project_usage_exporter:v2
+docker run --env-file openrc -p 8080:8080 denbicloud/os_project_usage_exporter:latest
 ```
