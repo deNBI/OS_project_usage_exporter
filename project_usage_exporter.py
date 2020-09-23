@@ -229,6 +229,8 @@ class OpenstackExporter(_ExporterBase):
                                     instance_hours = instance[HOURS_KEY]
                                     if instance_hours > 0:
                                         metric_amount = instance[instance_metric]
+                                        if metric == "total_memory_mb_usage":
+                                            metric_amount = int(metric_amount / 1024)
                                         total_usage += (instance_hours * metric_amount) * self.get_instance_weight(
                                             instance_metric, metric_amount, instance["started_at"])
                             project_usages[svm_project][metric] = total_usage
@@ -241,6 +243,8 @@ class OpenstackExporter(_ExporterBase):
                         instance_hours = instance[HOURS_KEY]
                         if instance_hours > 0:
                             metric_amount = instance[instance_metric]
+                            if metric == "total_memory_mb_usage":
+                                metric_amount = int(metric_amount / 1024)
                             total_usage += (instance_hours * metric_amount) * self.get_instance_weight(instance_metric, metric_amount, instance["started_at"])
                     project_usages[project][metric] = total_usage
         return project_usages
@@ -323,6 +327,7 @@ def valid_date(s):
 
 
 def get_dummy_weights(file):
+    file.seek(0)
     dummy_weights = toml.loads(file.read())
     response = requests.Response()
     response._content = json.dumps(dummy_weights["weights"], default=str).encode("utf-8")
@@ -518,29 +523,31 @@ def main():
     if args.dummy_weights or getenv(dummy_weights_file_env_var):
         args.weight_update_endpoint = "dummy-endpoint"
     while True:
-        if laps >= args.weight_update_frequency and args.weight_update_endpoint != "":
-            try:
-                if args.dummy_weights:
-                    weight_response = get_dummy_weights(args.dummy_weights)
-                elif getenv(dummy_weights_file_env_var):
-                    with open(getenv(dummy_weights_file_env_var)) as file:
-                        weight_response = get_dummy_weights(file)
-                else:
-                    weight_response = requests.get(args.weight_update_endpoint)
-                current_weights = {
-                    x['resource_set_timestamp']: {'memory_mb': {y['value']: y['weight'] for y in x['memory_mb']},
-                                                  'vcpus': {y['value']: y['weight'] for y in x['vcpus']}} for
-                    x in weight_response.json()}
-                logger.debug("Updated credits weights, new weights: " + str(current_weights))
-                exporter.update_weights(current_weights)
-            except Exception as e:
-                logger.exception(
-                    f"Received exception {e} while trying to update the credit weights, check if credit endpoint {args.weight_update_endpoint}"
-                    f" is accessible or contact the denbi team to check if the weights are set correctly. Traceback following."
-                )
-            laps = 0
         if args.weight_update_endpoint != "":
-            laps += 1
+            if laps >= args.weight_update_frequency:
+                try:
+                    if args.dummy_weights:
+                        weight_response = get_dummy_weights(args.dummy_weights)
+                    elif getenv(dummy_weights_file_env_var):
+                        with open(getenv(dummy_weights_file_env_var)) as file:
+                            weight_response = get_dummy_weights(file)
+                    else:
+                        weight_response = requests.get(args.weight_update_endpoint)
+                    current_weights = {
+                        x['resource_set_timestamp']: {'memory_mb': {y['value']: y['weight'] for y in x['memory_mb']},
+                                                      'vcpus': {y['value']: y['weight'] for y in x['vcpus']}} for
+                        x in weight_response.json()}
+                    logger.debug("Updated credits weights, new weights: " + str(current_weights))
+                    exporter.update_weights(current_weights)
+                except Exception as e:
+                    logger.exception(
+                        f"Received exception {e} while trying to update the credit weights, check if credit endpoint {args.weight_update_endpoint}"
+                        f" is accessible or contact the denbi team to check if the weights are set correctly. Traceback following."
+                    )
+                finally:
+                    laps = 0
+            else:
+                laps += 1
         try:
             sleep(args.update_interval)
             exporter.update()
