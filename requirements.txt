@@ -6,7 +6,7 @@ chardet==3.0.4
 cryptography==2.6.1
 dateparser==0.7.1
 decorator==4.4.1
-dogpile.cache==0.7.1
+dogpile.cache==1.1.1
 humanize==0.5.1
 idna==2.8
 iso8601==0.1.12
