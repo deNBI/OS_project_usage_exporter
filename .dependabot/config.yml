@@ -9,7 +9,7 @@ updates:
       - "deNBI/portal-dev"
     commit-message:
       prefix: "feat"
-      include_scope: true
+      include: "scope"
     open-pull-requests-limit: 15
 
   - package-ecosystem: "docker"
@@ -21,5 +21,5 @@ updates:
       - "deNBI/portal-dev"
     commit-message:
       prefix: "feat"
-      include_scope: true
+      include: "scope"
     open-pull-requests-limit: 15
