@@ -1,0 +1,25 @@
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+        interval: "weekly"
+    target-branch: "dev"
+    reviewers:
+      - "deNBI/portal-dev"
+    commit-message:
+      prefix: "feat"
+      include: "scope"
+    open-pull-requests-limit: 15
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+        interval: "weekly"
+    target-branch: "dev"
+    reviewers:
+      - "deNBI/portal-dev"
+    commit-message:
+      prefix: "feat"
+      include: "scope"
+    open-pull-requests-limit: 15
