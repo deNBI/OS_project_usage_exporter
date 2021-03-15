@@ -10,16 +10,16 @@ decorator==4.4.2
 dogpile.cache==1.1.2
 humanize==3.2.0
 idna==2.10
-importlib-metadata==3.7.2 ; python_version < '3.8'
+importlib-metadata==3.7.3 ; python_version < '3.8'
 iso8601==0.1.14
 jmespath==0.10.0
-jsonpatch==1.31
-jsonpointer==2.0
+jsonpatch==1.32
+jsonpointer==2.1
 keystoneauth1==4.3.1
 maya==0.6.1
 munch==2.5.1.dev12
 netifaces==0.10.9
-openstacksdk==0.54.0
+openstacksdk==0.55.0
 os-service-types==1.7.0
 pbr==5.5.1
 pendulum==2.1.2
