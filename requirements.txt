@@ -6,8 +6,8 @@ cffi==1.14.5
 chardet==4.0.0
 cryptography==3.4.7
 dateparser==1.0.0
-decorator==5.0.7
-dogpile.cache==1.1.2
+decorator==5.0.9
+dogpile.cache==1.1.3
 humanize==3.5.0
 idna==2.10
 importlib-metadata==4.0.1 ; python_version < '3.8'
@@ -19,7 +19,7 @@ keystoneauth1==4.3.1
 maya==0.6.1
 munch==2.5.1.dev12
 netifaces==0.10.9
-openstacksdk==0.56.0
+openstacksdk==0.57.0
 os-service-types==1.7.0
 pbr==5.6.0
 pendulum==2.1.2
@@ -32,7 +32,7 @@ pyyaml==5.4.1
 regex==2021.4.4
 requests==2.25.1
 requestsexceptions==1.4.0
-six==1.15.0
+six==1.16.0
 snaptime==0.2.4
 stevedore==3.3.0
 toml==0.10.2
