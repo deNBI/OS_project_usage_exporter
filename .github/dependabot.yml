@@ -6,7 +6,9 @@ updates:
         interval: "weekly"
     target-branch: "dev"
     reviewers:
-      - "deNBI/portal-dev"
+      - "vktrrdk"
+      - "eKatchko"
+      - "dweinholz"
     commit-message:
       prefix: "feat"
       include: "scope"
@@ -18,7 +20,9 @@ updates:
         interval: "weekly"
     target-branch: "dev"
     reviewers:
-      - "deNBI/portal-dev"
+      - "vktrrdk"
+      - "eKatchko"
+      - "dweinholz"
     commit-message:
       prefix: "feat"
       include: "scope"
