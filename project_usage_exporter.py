@@ -253,10 +253,10 @@ class OpenstackExporter(_ExporterBase):
         instance_started_timestamp = datetime.strptime(started_date, "%Y-%m-%dT%H:%M:%S.%f").timestamp()
         if self.weights is not None and len(self.weights) != 0:
             sorted_timestamps = sorted(self.weights.keys())
-            max_timestamp = max(sorted_timestamps)
+            min_timestamp = min(sorted_timestamps)
             associated_weights = None
-            for timestamp in sorted_timestamps:
-                if instance_started_timestamp <= timestamp or max_timestamp == timestamp:
+            for timestamp in sorted_timestamps[::-1]:
+                if instance_started_timestamp >= timestamp or min_timestamp == timestamp:
                     associated_weights = self.weights[timestamp]
                     break
             if associated_weights is not None:
