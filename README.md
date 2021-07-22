@@ -26,14 +26,13 @@ variables.
 usage: project_usage_exporter.py [-h] [-d DUMMY_DATA] [-w DUMMY_WEIGHTS]
                                  [--domain [DOMAIN [DOMAIN ...]]]
                                  [--domain-id DOMAIN_ID]
-                                 [--vcpu-weights VCPU_WEIGHTS]
-                                 [--mb-weights MB_WEIGHTS]
                                  [--simple-vm-id SIMPLE_VM_ID]
                                  [--simple-vm-tag SIMPLE_VM_TAG]
                                  [--weight-update-frequency WEIGHT_UPDATE_FREQUENCY]
                                  [--weight-update-endpoint WEIGHT_UPDATE_ENDPOINT]
                                  [--start-date-endpoint START_DATE_ENDPOINT]
                                  [-s START] [-i UPDATE_INTERVAL] [-p PORT]
+                                 [-v]
 
 Query project usages from an openstack instance and provide it in a prometheus
 compatible format. Alternatively develop in local mode and emulate machines
@@ -68,20 +67,6 @@ optional arguments:
                         identified by the given ID. Takes precedence over any
                         specified domain and default values. Can also be set
                         via $USAGE_EXPORTER_PROJECT_DOMAIN_ID (default: )
-  --vcpu-weights VCPU_WEIGHTS
-                        Use weights for different numbers of cpus in a vm.
-                        Value is given as the string representation of a
-                        dictionary with ints as keys and as values. a weight
-                        of 1 means no change. Above 1 its more expensive,
-                        under one it is less expensive. Can also be set via
-                        $USAGE_EXPORTER_VCPU_WEIGHTS (default: {})
-  --mb-weights MB_WEIGHTS
-                        Use weights for different numbers of mb (of ram) in a
-                        vm. Value is given as the string representation of a
-                        dictionary with ints as keys and as values. a weight
-                        of 1 means no change. Above 1 its more expensive,
-                        under one it is less expensive. Can also be set via
-                        $USAGE_EXPORTER_PROJECT_MB_WEIGHTS (default: {})
   --simple-vm-id SIMPLE_VM_ID
                         The ID of the Openstack project, that hosts the
                         SimpleVm projects. Can also be set vis
@@ -109,11 +94,12 @@ optional arguments:
                         over all other start date arguments. Defaults to the
                         value of environment variable
                         $USAGE_EXPORTER_START_DATE_ENDPOINT or will be left
-                        blank (default: None)
+                        blank (default: )
   -s START, --start START
                         Beginning time of stats (YYYY-MM-DD). If set the value
                         of environment variable $USAGE_EXPORTER_START_DATE is
-                        used. Uses maya for parsing. (default: datetime.today())
+                        used. Uses maya for parsing. (default: 2021-07-20
+                        18:04:41.399703)
   -i UPDATE_INTERVAL, --update-interval UPDATE_INTERVAL
                         Time to sleep between intervals, in case the calls
                         cause to much load on your openstack instance.
@@ -121,6 +107,7 @@ optional arguments:
                         $USAGE_EXPORTER_UPDATE_INTERVAL or 300 (in seconds)
                         (default: 30)
   -p PORT, --port PORT  Port to provide metrics on (default: 8080)
+  -v, --verbose         Activate logging debug level (default: 0)
 
 GNU AGPLv3 @ tluettje
 ```
@@ -134,7 +121,7 @@ simple `toml` files. A few profiles are available inside the `/resources` folder
 ```shell
 ./project_usage_exporter.py \
  -d resources/dummy_cc.toml -w resources/dummy_weights.toml \
- --vcpu-weights "{2:1}" --mb-weights "{1024:1}" --domain --simple-vm-id 123realsimplevm
+ --domain --simple-vm-id 123realsimplevm
 ```
 or
 ```
