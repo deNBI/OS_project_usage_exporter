@@ -65,8 +65,6 @@ weights_update_frequency_env_var = "USAGE_EXPORTER_WEIGHT_UPDATE_FREQUENCY"
 weights_update_endpoint_env_var = "USAGE_EXPORTER_WEIGHTS_UPDATE_ENDPOINT"
 simple_vm_project_id_env_var = "USAGE_EXPORTER_SIMPLE_VM_PROJECT_ID"
 simple_vm_project_name_tag_env_var = "USAGE_EXPORTER_SIMPLE_VM_PROJECT_TAG"
-vcpu_weights_env_var = "USAGE_EXPORTER_VCPU_WEIGHTS"
-project_mb_weights_env_var = "USAGE_EXPORTER_PROJECT_MB_WEIGHTS"
 verbosity_env_var = "USAGE_EXPORTER_VERBOSE_MODE"
 start_date_endpoint_env_var = "USAGE_EXPORTER_START_DATE_ENDPOINT"
 
@@ -112,8 +110,6 @@ class OpenstackExporter(_ExporterBase):
         stats_start: datetime = datetime.today(),
         domains: Iterable[str] = None,
         domain_id: Optional[str] = None,
-        vcpu_weights=None,
-        mb_weights=None,
         simple_vm_project="",
         simple_vm_tag=None,
         dummy_file: TextIO = None
@@ -123,15 +119,10 @@ class OpenstackExporter(_ExporterBase):
         self.projects: Set[OpenstackProject] = set()
         self.stats_start = stats_start
         self.simple_project_usages = None
-        self.vcpu_weights = vcpu_weights
-        self.mb_weights = mb_weights
         self.simple_vm_project = simple_vm_project
         self.simple_vm_tag = simple_vm_tag
         self.dummy_file = dummy_file
-        if vcpu_weights is not None and mb_weights is not None:
-            self.weights = {0: {"memory_mb": mb_weights, "vcpus": vcpu_weights}}
-        else:
-            self.weights = None
+        self.weights = None
         if self.dummy_file is not None:
             self.cloud = DummyCloud(self.dummy_file, self.stats_start)
         else:
@@ -203,14 +194,20 @@ class OpenstackExporter(_ExporterBase):
                 continue
             if project.is_simple_vm_project:
                 if self.simple_vm_tag is None:
-                    logger.error("The simple vm tag is not set, please set the simple vm metadata tag for simple vm tracking")
+                    logger.error("The simple vm tag is not set, please set the simple vm metadata "
+                                 "tag for simple vm tracking")
                 else:
                     json_payload_metadata = self.cloud.compute.get(  # type: ignore
                         f"/servers/detail?all_tenants=false&project_id=" + project.id
                     ).json()
                     instance_id_to_project_dict = {}
                     for instance in json_payload_metadata['servers']:
-                        instance_id_to_project_dict[instance['id']] = instance['metadata'][self.simple_vm_tag]
+                        try:
+                            instance_id_to_project_dict[instance['id']] = instance['metadata'][self.simple_vm_tag]
+                        except KeyError as e:
+                            logger.debug(f"Could not get metadata for instance with id {instance['id']}"
+                                         f"Error message. {e}")
+                            continue
                     simple_vm_project_names = list(set(instance_id_to_project_dict.values()))
                     for simple_vm_project_name in simple_vm_project_names:
                         svm_project = OpenstackProject(
@@ -225,14 +222,18 @@ class OpenstackExporter(_ExporterBase):
                             instance_metric = "_".join(metric.split("_")[1:len(metric.split("_")) - 1])
                             total_usage = 0
                             for instance in project_usage["server_usages"]:
-                                if instance_id_to_project_dict[instance["instance_id"]] == simple_vm_project_name:
-                                    instance_hours = instance[HOURS_KEY]
-                                    if instance_hours > 0:
-                                        metric_amount = instance[instance_metric]
-                                        if metric == "total_memory_mb_usage":
-                                            metric_amount = int(metric_amount / 1024)
-                                        total_usage += (instance_hours * metric_amount) * self.get_instance_weight(
-                                            instance_metric, metric_amount, instance["started_at"])
+                                try:
+                                    if instance_id_to_project_dict[instance["instance_id"]] == simple_vm_project_name:
+                                        instance_hours = instance[HOURS_KEY]
+                                        if instance_hours > 0:
+                                            metric_amount = instance[instance_metric]
+                                            if metric == "total_memory_mb_usage":
+                                                metric_amount = int(metric_amount / 1024)
+                                            total_usage += (instance_hours * metric_amount) * self.get_instance_weight(
+                                                instance_metric, metric_amount, instance["started_at"])
+                                except KeyError as e:
+                                    logger.debug(f"Catching key error: {e}")
+                                    continue
                             project_usages[svm_project][metric] = total_usage
             else:
                 project_usages[project] = {}
@@ -334,6 +335,20 @@ def get_dummy_weights(file):
     return response
 
 
+def convert_verbose():
+    try:
+        returned_bool = strtobool(getenv(verbosity_env_var, "False").strip())
+        return returned_bool
+    except Exception as e:
+        return False
+
+
+def nullable_string(val):
+    if not val:
+        return None
+    return val
+
+
 def main():
     parser = ArgumentParser(
         epilog=f"{__license__} @ {__author__}",
@@ -361,7 +376,7 @@ def main():
     parser.add_argument(
         "--domain",
         default=[
-            domain
+            domain.strip()
             for domain in getenv(
                 project_domain_env_var, ",".join(default_project_domains)
             ).split(",")
@@ -376,39 +391,21 @@ def main():
     )
     parser.add_argument(
         "--domain-id",
-        default=getenv(project_domain_id_env_var, ""),
+        default=getenv(project_domain_id_env_var, "").strip(),
         help=f"""Only export usages of projects belonging to the domain identified by
         the given ID. Takes precedence over any specified domain and default values. Can
         also be set via ${project_domain_id_env_var}""",
     )
     parser.add_argument(
-        "--vcpu-weights",
-        default=getenv(vcpu_weights_env_var, "{}"),
-        type=str,
-        help=f"""Use weights for different numbers of cpus in a vm. Value is given as
-         the string representation of a dictionary with ints as keys and as values.
-         a weight of 1 means no change. Above 1 its more expensive, under one it is less 
-         expensive. Can also be set via ${vcpu_weights_env_var}""",
-    )
-    parser.add_argument(
-        "--mb-weights",
-        default=getenv(project_mb_weights_env_var, "{}"),
-        type=str,
-        help=f"""Use weights for different numbers of mb (of ram) in a vm. Value is given as
-         the string representation of a dictionary with ints as keys and as values.
-         a weight of 1 means no change. Above 1 its more expensive, under one it is less 
-         expensive. Can also be set via ${project_mb_weights_env_var}""",
-    )
-    parser.add_argument(
         "--simple-vm-id",
-        default=getenv(simple_vm_project_id_env_var, ""),
+        default=getenv(simple_vm_project_id_env_var, "").strip(),
         type=str,
         help=f"""The ID of the Openstack project, that hosts the SimpleVm projects. 
         Can also be set vis ${simple_vm_project_id_env_var}""",
     )
     parser.add_argument(
         "--simple-vm-tag",
-        default=getenv(simple_vm_project_name_tag_env_var, "project_name"),
+        default=getenv(simple_vm_project_name_tag_env_var, "project_name").strip(),
         type=str,
         help=f"""The metadata of the Openstack project, that hosts the SimpleVm projects. It is used
         to differentiate the simple vm projects, default: project_name
@@ -424,14 +421,14 @@ def main():
     parser.add_argument(
         "--weight-update-endpoint",
         type=str,
-        default=getenv(weights_update_endpoint_env_var, ""),
+        default=getenv(weights_update_endpoint_env_var, "").strip(),
         help=f"""The endpoint url where the current weights can be updated
         . Defaults to the value of environment variable ${weights_update_endpoint_env_var} or will be left blank""",
     )
     parser.add_argument(
         "--start-date-endpoint",
-        type=str,
-        default=getenv(start_date_endpoint_env_var, None),
+        type=nullable_string,
+        default=getenv(start_date_endpoint_env_var, "").strip(),
         help=f"""The endpoint url where the start date can be requested.
         If defined, requested date takes precedence over all other start date arguments.
         Defaults to the value of environment variable ${start_date_endpoint_env_var} or will be left blank""",
@@ -456,21 +453,12 @@ def main():
     parser.add_argument(
         "-p", "--port", type=int, default=8080, help="Port to provide metrics on"
     )
-    try:
-        parser.add_argument(
-            "-v", "--verbose",
-            action="store_true",
-            default=strtobool(getenv(verbosity_env_var, "False")),
-            help="Activate logging debug level"
-        )
-    except:
-        logger.error(f"Could not convert {verbosity_env_var} to boolean.")
-        parser.add_argument(
-            "-v", "--verbose",
-            action="store_true",
-            default=False,
-            help="Activate logging debug level"
-        )
+    parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        default=convert_verbose(),
+        help="Activate logging debug level"
+    )
     args = parser.parse_args()
     if args.verbose:
         logger.setLevel(logging.DEBUG)
@@ -489,7 +477,6 @@ def main():
         try:
             exporter = OpenstackExporter(
                 domains=args.domain, stats_start=args.start, domain_id=args.domain_id,
-                vcpu_weights=ast.literal_eval(args.vcpu_weights), mb_weights=ast.literal_eval(args.mb_weights),
                 simple_vm_project=args.simple_vm_id, simple_vm_tag=args.simple_vm_tag, dummy_file=args.dummy_data
             )
         except ValueError as e:
@@ -502,7 +489,6 @@ def main():
             with open(getenv(dummy_file_env_var)) as file:
                 exporter = OpenstackExporter(
                     domains=args.domain, stats_start=args.start, domain_id=args.domain_id,
-                    vcpu_weights=ast.literal_eval(args.vcpu_weights), mb_weights=ast.literal_eval(args.mb_weights),
                     simple_vm_project=args.simple_vm_id, simple_vm_tag=args.simple_vm_tag, dummy_file=file
                 )
         except ValueError as e:
@@ -512,7 +498,6 @@ def main():
             logger.info("Using regular openstack exporter")
             exporter = OpenstackExporter(
                 domains=args.domain, stats_start=args.start, domain_id=args.domain_id,
-                vcpu_weights=ast.literal_eval(args.vcpu_weights), mb_weights=ast.literal_eval(args.mb_weights),
                 simple_vm_project=args.simple_vm_id, simple_vm_tag=args.simple_vm_tag
             )
         except ValueError as e:
