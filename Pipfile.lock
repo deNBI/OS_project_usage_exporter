@@ -273,11 +273,11 @@
         },
         "openstacksdk": {
             "hashes": [
-                "sha256:831204e6ca7ff51d98da41ea9b523c2a73a097d3232fdaf926a33a3b6bf1f0d1",
-                "sha256:d8368d1728f686114213d22cc8e3eef71629fae1424b2ad2c5d22a7b9a04a278"
+                "sha256:25a4897edace03544a4427ca7260113bd91f149cef79531bc4365838c8455349",
+                "sha256:3df760cd272398abfac8cebe62eeb82cbc497bb25d4dd707576f74a8ce9abf0d"
             ],
             "index": "pypi",
-            "version": "==0.58.0"
+            "version": "==0.59.0"
         },
         "os-service-types": {
             "hashes": [
