@@ -10,19 +10,19 @@ appdirs==1.4.4
 backports.zoneinfo==0.2.1; python_version < '3.9'
 certifi==2021.5.30
 cffi==1.14.6
-charset-normalizer==2.0.4; python_version >= '3'
+charset-normalizer==2.0.6; python_version >= '3'
 cryptography==3.4.8; python_version >= '3.6'
 dateparser==1.0.0; python_version >= '3.5'
-decorator==5.0.9; python_version >= '3.5'
+decorator==5.1.0; python_version >= '3.5'
 dogpile.cache==1.1.4; python_version >= '3.6'
 humanize==3.11.0; python_version >= '3.6'
 idna==3.2; python_version >= '3'
 importlib-metadata==4.8.1; python_version < '3.8'
-iso8601==1.0.0a1; python_version < '4.0' and python_full_version >= '3.6.2'
+iso8601==1.0.0a1; python_version < '4' and python_full_version >= '3.6.2'
 jmespath==0.10.0; python_version >= '2.6' and python_version not in '3.0, 3.1, 3.2, 3.3'
 jsonpatch==1.32; python_version >= '2.7' and python_version not in '3.0, 3.1, 3.2, 3.3, 3.4'
 jsonpointer==2.1; python_version >= '2.7' and python_version not in '3.0, 3.1, 3.2, 3.3'
-keystoneauth1==4.3.1; python_version >= '3.6'
+keystoneauth1==4.4.0; python_version >= '3.6'
 maya==0.6.1
 munch==2.5.1.dev12
 netifaces==0.11.0
@@ -43,7 +43,7 @@ six==1.16.0; python_version >= '2.7' and python_version not in '3.0, 3.1, 3.2, 3
 snaptime==0.2.4
 stevedore==3.4.0; python_version >= '3.6'
 toml==0.10.2
-typing-extensions==3.10.0.1; python_version < '3.8'
+typing-extensions==3.10.0.2; python_version < '3.8'
 tzlocal==4.0b1; python_version >= '3.6'
-urllib3==1.26.6; python_version >= '2.7' and python_version not in '3.0, 3.1, 3.2, 3.3, 3.4' and python_version < '4.0'
+urllib3==1.26.6; python_version >= '2.7' and python_version not in '3.0, 3.1, 3.2, 3.3, 3.4' and python_version < '4'
 zipp==3.5.0; python_version >= '3.6'
