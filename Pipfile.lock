@@ -282,11 +282,11 @@
         },
         "openstacksdk": {
             "hashes": [
-                "sha256:25a4897edace03544a4427ca7260113bd91f149cef79531bc4365838c8455349",
-                "sha256:3df760cd272398abfac8cebe62eeb82cbc497bb25d4dd707576f74a8ce9abf0d"
+                "sha256:3eed308871230f0c53a8f58b6c5a358b184080c6b2c6bc69ab088eea057aa127",
+                "sha256:9894d3d510563dcfc50c4755287dbfbf98def1f37caf2cfc15e9d0e1fd5d9a41"
             ],
             "index": "pypi",
-            "version": "==0.59.0"
+            "version": "==0.61.0"
         },
         "os-service-types": {
             "hashes": [
@@ -706,7 +706,7 @@
                 "sha256:f8afcf15cc511ada719a88e013cec87c11aff7b91f019295eb4530f96fe5ef2f",
                 "sha256:fb1bbeac803adea29cedd70781399c99138358c26d05fcbd23c13016b7f5ec65"
             ],
-            "markers": "python_version < '3.8'",
+            "markers": "python_version < '3.8' and implementation_name == 'cpython'",
             "version": "==1.4.3"
         },
         "typing-extensions": {
