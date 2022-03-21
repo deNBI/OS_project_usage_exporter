@@ -1,4 +1,4 @@
-FROM python:3.10.2-alpine
+FROM python:3.10.3-alpine
 
 RUN apk add --no-cache linux-headers musl-dev gcc libffi-dev openssl-dev cargo
 WORKDIR /code
