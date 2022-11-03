@@ -198,7 +198,7 @@ class OpenstackExporter(_ExporterBase):
                                  "tag for simple vm tracking")
                 else:
                     json_payload_metadata = self.cloud.compute.get(  # type: ignore
-                        f"/servers/detail?all_tenants=false&project_id=" + project.id
+                        f"/servers/detail?all_tenants=True&project_id=" + project.id
                     ).json()
                     instance_id_to_project_dict = {}
                     for instance in json_payload_metadata['servers']:
