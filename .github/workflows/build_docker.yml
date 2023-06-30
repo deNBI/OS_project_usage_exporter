@@ -9,5 +9,5 @@ jobs:
               uses: rokroskar/workflow-run-cleanup-action@v0.3.3
               env:
                 GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-            - uses: actions/checkout@v3.5.2
+            - uses: actions/checkout@v3.5.3
             - run: docker build --no-cache  . 
