@@ -8,7 +8,7 @@
 -i https://pypi.org/simple/
 appdirs==1.4.4
 backports.zoneinfo==0.2.1; python_version < '3.9'
-certifi==2023.7.22; python_version >= '3.6'
+certifi==2024.7.4; python_version >= '3.6'
 cffi==1.16.0
 charset-normalizer==2.1.1; python_version >= '3'
 cryptography==42.0.4; python_version >= '3.6'
